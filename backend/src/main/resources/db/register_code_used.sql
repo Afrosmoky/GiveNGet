@@ -1,0 +1,1 @@
+alter table register_code add column used boolean default false;

@@ -1,0 +1,207 @@
+# ZMIANY W ENDPOINTACH - SYSTEM PUNKTÓW, RANG I LICZNIKÓW OFERT
+# ================================================================
+
+## 1. NOWE POLA W ODPOWIEDZIACH API
+# =================================
+
+### UserData (profil użytkownika)
+# Dodane pola:
+- userRank: String (STARTER, RELIABLE_SELLER, TRUSTED_PARTNER, LOCAL_HERO, AMBASSADOR)
+- trustPoints: Integer (punkty zaufania użytkownika)
+- freeOffersCount: Integer (liczba pozostałych darmowych ofert)
+
+### OfferDetailsDTO (szczegóły oferty)
+# Dodane pola:
+- sellerRank: String (ranga sprzedawcy)
+- sellerTrustPoints: Integer (punkty zaufania sprzedawcy)
+
+### Dashboard (panel użytkownika)
+# Dodane pola w userInfo:
+- userRank: String
+- trustPoints: Integer
+- freeOffersCount: Integer
+
+## 2. ZMIANY W LOGICE BIZNESOWEJ
+# =============================
+
+### Tworzenie ofert (POST /api/offers)
+# NOWA WALIDACJA:
+- Sprawdzanie czy użytkownik ma dostępne darmowe oferty
+- Błąd 400: "Nie możesz utworzyć nowej oferty. Wykorzystałeś wszystkie darmowe oferty w tym miesiącu."
+- Automatyczne zmniejszenie licznika po utworzeniu oferty
+
+### Dodawanie ocen (POST /api/rates)
+# NOWA FUNKCJONALNOŚĆ:
+- Automatyczne obliczanie punktów zaufania po dodaniu oceny
+- Aktualizacja punktów w czasie rzeczywistym
+
+## 3. NOWE ENDPOINTY (SCHEDULERY)
+# ==============================
+
+### UserRankScheduler
+# Automatyczne uruchamianie codziennie o 1:00:
+- Aktualizacja rang wszystkich użytkowników
+- Reset liczników darmowych ofert
+- Wysyłanie powiadomień emailowych o zmianie rangi
+
+## 4. NOWE SZABLONY EMAILOWE
+# =========================
+
+### rank-promotion
+# Powiadomienie o awansie na wyższą rangę:
+- Nazwa nowej rangi
+- Średnia ocen i punkty zaufania
+- Lista korzyści dla nowej rangi
+
+### rank-degradation
+# Powiadomienie o degradacji do niższej rangi:
+- Nazwa obecnej rangi
+- Średnia ocen i punkty zaufania
+- Porady jak poprawić rangę
+
+## 5. STRUKTURA RANG I KORZYŚCI
+# ============================
+
+### STARTER (domyślna)
+- 5 darmowych ofert miesięcznie
+- Brak dodatkowych korzyści
+
+### RELIABLE_SELLER
+- Wymagania: min. 4,0⭐ średniej, 100 PZ
+- Korzyści: Większa widoczność ogłoszeń, +5 darmowych ofert
+
+### TRUSTED_PARTNER
+- Wymagania: min. 4,5⭐ średniej, 300 PZ
+- Korzyści: Odznaka profilu, Promowane miejsce w wynikach, Zniżka 20% na boosty
+
+### LOCAL_HERO
+- Wymagania: min. 4,7⭐ średniej, 700 PZ
+- Korzyści: Priorytet w mapie i wyszukiwarce, Statystyki "ile uratowałeś jedzenia", Darmowy boost raz w miesiącu
+
+### AMBASSADOR
+- Wymagania: min. 4,9⭐ średniej, 1500 PZ
+- Korzyści: Wyróżnienie na mapie jako Ambasador, Zniżki 40% na wszystkie płatne funkcje, Wcześniejszy dostęp do nowych opcji
+
+## 6. SYSTEM PUNKTÓW ZAUFANIA
+# ==========================
+
+### Przyznawanie punktów:
+- 5⭐ z komentarzem: +10 PZ
+- 5⭐ bez komentarza: +5 PZ
+- 4⭐: +5 PZ
+- 3⭐: 0 PZ (neutralna)
+- 2⭐: -10 PZ
+- 1⭐: -25 PZ
+
+### Automatyczna aktualizacja:
+- Po każdej dodanej ocenie
+- Codziennie o 1:00 (scheduler)
+- Przy zmianie rangi
+
+## 7. LICZNIK DARMOWYCH OFERT
+# =========================
+
+### Domyślne wartości:
+- STARTER: 5 ofert
+- RELIABLE_SELLER: 10 ofert
+- TRUSTED_PARTNER: 10 ofert
+- LOCAL_HERO: 10 ofert
+- AMBASSADOR: 10 ofert
+
+### Mechanizm:
+- Sprawdzanie przed utworzeniem oferty
+- Automatyczne zmniejszenie po utworzeniu
+- Miesięczny reset (1. dnia każdego miesiąca)
+- Nie sumują się z miesiąca na miesiąc
+
+## 8. PRZYKŁADY ODPOWIEDZI API
+# ==========================
+
+### GET /api/profile/{userId}
+{
+  "userData": {
+    "id": 123,
+    "name": "Jan Kowalski",
+    "userRank": "TRUSTED_PARTNER",
+    "trustPoints": 350,
+    "freeOffersCount": 8,
+    // ... inne pola
+  },
+  "offers": [...],
+  "rate": {...}
+}
+
+### GET /api/offers/{id}
+{
+  "id": "offer123",
+  "name": "Świeże warzywa",
+  "sellerRank": "LOCAL_HERO",
+  "sellerTrustPoints": 750,
+  // ... inne pola
+}
+
+### GET /api/user/dashboard
+{
+  "user": {
+    "id": 123,
+    "email": "user@example.com",
+    "userRank": "RELIABLE_SELLER",
+    "trustPoints": 150,
+    "freeOffersCount": 7
+    // ... inne pola
+  }
+}
+
+## 9. KODY BŁĘDÓW
+# ==============
+
+### 400 Bad Request
+- "Nie możesz utworzyć nowej oferty. Wykorzystałeś wszystkie darmowe oferty w tym miesiącu."
+
+## 10. MIGRACJE BAZY DANYCH
+# =======================
+
+### Nowe kolumny w tabeli users:
+- trust_points: INTEGER DEFAULT 0
+- user_rank: VARCHAR(50) DEFAULT 'STARTER'
+- free_offers_count: INTEGER DEFAULT 5
+- last_offers_reset_date: DATE DEFAULT CURRENT_DATE
+
+### Nowe szablony emaili:
+- rank-promotion
+- rank-degradation
+
+## 11. HARMONOGRAM AUTOMATYZACJI
+# =============================
+
+### Codziennie o 1:00 w nocy:
+1. Aktualizacja rang wszystkich użytkowników
+2. Reset liczników darmowych ofert (1. dnia miesiąca)
+3. Wysyłanie powiadomień o zmianie rangi
+
+### W czasie rzeczywistym:
+1. Aktualizacja punktów zaufania po dodaniu oceny
+2. Sprawdzanie licznika ofert przed utworzeniem
+3. Zmniejszenie licznika po utworzeniu oferty
+
+## 12. UWAGI DLA FRONTENDU
+# =======================
+
+### Wyświetlanie rang:
+- Użyj userRank.getDisplayName() dla nazw wyświetlanych
+- Pokazuj korzyści dla każdej rangi
+- Wyróżniaj użytkowników z wyższymi rangami
+
+### Licznik ofert:
+- Pokazuj pozostałą liczbę darmowych ofert
+- Blokuj przycisk "Utwórz ofertę" gdy licznik = 0
+- Informuj o dacie resetu (1. dnia miesiąca)
+
+### Punkty zaufania:
+- Wyświetlaj aktualną liczbę punktów
+- Pokazuj postęp do następnej rangi
+- Wyróżniaj użytkowników z wysokimi punktami
+
+### Powiadomienia:
+- Obsługuj nowe typy emaili (promocja/degradacja)
+- Pokazuj informacje o korzyściach nowej rangi

@@ -1,0 +1,39 @@
+# Pliki z secretami — NIE commitować
+.env
+.env.local
+.env.demo
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store
+~$*
+
+# Docker build cache
+.dockerignore
+
+# Next.js build output
+frontend/.next/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+
+# Maven build output
+backend/target/
+
+# Uploaded files (runtime data)
+backend/uploads/
+
+# IntelliJ local HTTP
+backend/src/.lh/
+
+# Firebase service account key — NIE commitować
+backend/src/main/resources/serviceAccountKey.json
+
+# Dokumenty robocze / wewnętrzne (nie dla repo)
+CONTEXT.md
+Rozmowa_GiveNGet_ściąga.md
+Audyt_Techniczny_GiveNGet.docx
+GiveNGet_wycena.docx

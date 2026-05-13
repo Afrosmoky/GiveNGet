@@ -1,0 +1,4 @@
+ALTER TABLE offer
+    ADD COLUMN views_count BIGINT NOT NULL DEFAULT 0;
+
+

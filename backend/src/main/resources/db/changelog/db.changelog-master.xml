@@ -1,0 +1,199 @@
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.1.xsd">
+
+     <changeSet id="images" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/images.sql"/>
+    </changeSet>
+    <changeSet id="users" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/users.sql"/>
+    </changeSet>
+    <changeSet id="register_code" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/register_code.sql"/>
+    </changeSet>
+    <changeSet id="mail_templates" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/mail_templates.sql"/>
+    </changeSet>
+    <changeSet id="users_verified" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/users_verified.sql"/>
+    </changeSet>
+    <changeSet id="mail_confirm_template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/mail_confirm_template.sql"/>
+    </changeSet>
+    <changeSet id="register_code_used" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/register_code_used.sql"/>
+    </changeSet>
+    <changeSet id="reset_password_template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/reset_password_template.sql"/>
+    </changeSet>
+    <changeSet id="reset_password_code" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/reset_password_code.sql"/>
+    </changeSet>
+    <changeSet id="migrate_image_to_file_path" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/migrate_image_to_file_path.sql"/>
+    </changeSet>
+    <changeSet id="migration_avatar_to_users" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/migration_avatar_to_users.sql"/>
+    </changeSet>
+    <changeSet id="reset_password_notification" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/reset_password_notification.sql"/>
+    </changeSet>
+    <changeSet id="01-email_change_template.sql" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/01-email_change_template.sql"/>
+    </changeSet>
+    <changeSet id="02-static_content" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/02-static_content.sql"/>
+    </changeSet>
+    <changeSet id="03-change_age_to_date_of_birth" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/03-change_age_to_date_of_birth.sql"/>
+    </changeSet>
+    <changeSet id="04-add_user_type_column" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/04-add_user_type_column.sql"/>
+    </changeSet>
+    <changeSet id="05-offers" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/05-offers.sql"/>
+    </changeSet>
+    <changeSet id="06-modify_offers" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/06-modify_offers.sql"/>
+    </changeSet>
+    <changeSet id="07-extend_user" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/07-extend_user.sql"/>
+    </changeSet>
+    <changeSet id="08-add-user-to-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/08-add-user-to-offer.sql"/>
+    </changeSet>
+    <changeSet id="09-add-location-to-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/09-add-location-to-offer.sql"/>
+    </changeSet>
+    <changeSet id="10-user-rates" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/10-user-rates.sql"/>
+    </changeSet>
+    <changeSet id="11-chat-system" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/11-chat-system.sql"/>
+    </changeSet>
+    <changeSet id="12-chat-system-continue" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/12-chat-system-continue.sql"/>
+    </changeSet>
+    <changeSet id="13-add-last-read-message-id" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/13-add-last-read-message-id.sql"/>
+    </changeSet>
+    <changeSet id="14-add-fcm-token" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/14-add-fcm-token.sql"/>
+    </changeSet>
+    <changeSet id="15-add-recommended-to-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/15-add-recommended-to-offer.sql"/>
+    </changeSet>
+    <changeSet id="16-create-complaints-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/16-create-complaints-table.sql"/>
+    </changeSet>
+    <changeSet id="17-add-pickup-dates-to-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/17-add-pickup-dates-to-offer.sql"/>
+    </changeSet>
+    <changeSet id="18-add-offer-to-complaints" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/18-add-offer-to-complaints.sql"/>
+    </changeSet>
+    <changeSet id="19-modify-user-rates" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/19-modify-user-rates.sql"/>
+    </changeSet>
+    <changeSet id="20-delete-user" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/20-delete-user.sql"/>
+    </changeSet>
+    <changeSet id="21-add-views-to-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/21-add-views-to-offer.sql"/>
+    </changeSet>
+    <changeSet id="22-create-favorite-offers-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/22-create-favorite-offers-table.sql"/>
+    </changeSet>
+    <changeSet id="23-offer-change-mail-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/23-offer-change-mail-template.sql"/>
+    </changeSet>
+    <changeSet id="24-move-company-info-to-bio" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/24-move-company-info-to-bio.sql"/>
+    </changeSet>
+    <changeSet id="25-add-offer-status" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/25-add-offer-status.sql"/>
+    </changeSet>
+    <changeSet id="26-create-favorite-categories-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/26-create-favorite-categories-table.sql"/>
+    </changeSet>
+    <changeSet id="27-create-forbidden-patterns-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/27-create-forbidden-patterns-table.sql"/>
+    </changeSet>
+    <changeSet id="27-seed-forbidden-patterns" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/27-seed-forbidden-patterns.sql"/>
+    </changeSet>
+    <changeSet id="28-add-user-stats-fields" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/28-add-user-stats-fields.sql"/>
+    </changeSet>
+    <changeSet id="29-ban-user-templates" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/29-ban-user-templates.sql"/>
+    </changeSet>
+    <changeSet id="30-update-offer-change-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/30-update-offer-change-template.sql"/>
+    </changeSet>
+    <changeSet id="31-update-categories-structure" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/31-update-categories-structure.sql"/>
+    </changeSet>
+
+    <changeSet id="32-add-resolved-to-complaints" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/32-add-resolved-to-complaints.sql"/>
+    </changeSet>
+
+    <changeSet id="33-delete-offer-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/33-delete-offer-template.sql"/>
+    </changeSet>
+
+    <changeSet id="34-add-blocked-pending-status" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/34-add-blocked-pending-status.sql"/>
+    </changeSet>
+
+    <changeSet id="35-change-email-notification-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/35-change-email-notification-template.sql"/>
+    </changeSet>
+
+    <changeSet id="36-offer-expiry-notification-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/36-offer-expiry-notification-template.sql"/>
+    </changeSet>
+
+    <changeSet id="37-add-user-points-rank-offers" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/37-add-user-points-rank-offers.sql"/>
+    </changeSet>
+
+    <changeSet id="38-rank-promotion-templates" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/38-rank-promotion-templates.sql"/>
+    </changeSet>
+
+    <changeSet id="39-create-offer-statistics-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/39-create-offer-statistics-table.sql"/>
+    </changeSet>
+
+    <changeSet id="40-remove-views-count-from-offer" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/40-remove-views-count-from-offer.sql"/>
+    </changeSet>
+
+    <changeSet id="41-create-consultant-chat-tables" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/41-create-consultant-chat-tables.sql"/>
+    </changeSet>
+
+    <changeSet id="42-create-user-bans-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/42-create-user-bans-table.sql"/>
+    </changeSet>
+
+    <changeSet id="43-ban-user-temporary-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/43-ban-user-temporary-template.sql"/>
+    </changeSet>
+
+    <changeSet id="44-create-complaint-notes-table" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/44-create-complaint-notes-table.sql"/>
+    </changeSet>
+
+    <changeSet id="45-offer-modified-by-staff-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/45-offer-modified-by-staff-template.sql"/>
+    </changeSet>
+
+    <changeSet id="46-update-offer-modified-by-staff-template" author="amadeusz.trzebiatowski">
+        <sqlFile path="db/46-update-offer-modified-by-staff-template.sql"/>
+    </changeSet>
+
+</databaseChangeLog>

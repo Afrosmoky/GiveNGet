@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS forbidden_pattern (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  pattern VARCHAR(512) NOT NULL,
+  type ENUM('WORD','REGEX') NOT NULL,
+  category VARCHAR(64) NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
