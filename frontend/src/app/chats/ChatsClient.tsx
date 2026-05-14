@@ -145,6 +145,9 @@ export default function ChatsClient() {
         const res = await authorizedFetch(`${environment.apiUrl}/api/chats/me`, { cache: "no-store" });
         const data = await res.json();
         setChats(data);
+        if (data && data.length > 0) {
+          wsCtx.subscribeToChats(data.map((c: Chat) => c.id));
+        }
       } catch {
         setChats([]);
       } finally {
