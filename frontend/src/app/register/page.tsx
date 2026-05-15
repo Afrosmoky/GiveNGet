@@ -1227,6 +1227,16 @@ function CompanyRegistrationForm() {
 
     setErrors(newErrors);
 
+    // Sprawdź czy użytkownik wybrał lokalizację na mapie (lat/lon wymagane)
+    if (formData.lat === undefined || formData.lon === undefined) {
+      setErrors(prev => ({
+        ...prev,
+        localization: 'Wybierz lokalizację z listy podpowiedzi, aby pobrać współrzędne'
+      }));
+      setCurrentStep(1);
+      return;
+    }
+
     const secondStepErrors = [newErrors.firstName, newErrors.lastName, newErrors.email, newErrors.phoneNumber, newErrors.password];
     const hasErrors = secondStepErrors.some(error => error !== '');
 
