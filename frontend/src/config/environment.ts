@@ -13,6 +13,6 @@ export const environment = {
   apiUrl,
   environmentName,
   geoapifyApiKey: '432e181121ee40bd92c503406a809184',
-  googleApiKey: 'AIzaSyCivUY0Fzuf4miBpRT_Bsf0VmDOUixOuvI',
-  REACT_APP_Maps_API_KEY: 'AIzaSyCivUY0Fzuf4miBpRT_Bsf0VmDOUixOuvI',
+  googleApiKey: 'AIzaSyAvK7yhND7NUxnpQImZhIw8r1YRS9NvWoc',
+  REACT_APP_Maps_API_KEY: 'AIzaSyAvK7yhND7NUxnpQImZhIw8r1YRS9NvWoc',
 }; 
