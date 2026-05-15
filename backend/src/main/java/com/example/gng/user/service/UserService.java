@@ -242,6 +242,8 @@ public class UserService {
         businessUserModel.setBio(registerCompanyDTO.getCompanyDescription());
         businessUserModel.setCurrency(Currency.PLN.name());
         businessUserModel.setLang(Language.pl.name());
+        businessUserModel.setLat(registerCompanyDTO.getLat());
+        businessUserModel.setLon(registerCompanyDTO.getLon());
 
         BusinessUserModel savedUser = null;
         try {
