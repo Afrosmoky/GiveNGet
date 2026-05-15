@@ -16,6 +16,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(undefin
 export const WebSocketProvider = ({ children, userId }: { children: ReactNode; userId: number | null }) => {
   const wsRef = useRef<WebSocket | null>(null);
   const [subscribedChats, setSubscribedChats] = useState<number[]>([]);
+  const subscribedChatsRef = useRef<number[]>([]); // ref zawsze aktualny, używany w onopen
   const globalMessageHandler = useRef<((msg: Message) => void) | null>(null);
   const messageHandlers = useRef<Set<((msg: Message) => void)>>(new Set());
   
@@ -49,6 +50,7 @@ export const WebSocketProvider = ({ children, userId }: { children: ReactNode; u
   // Funkcja do subskrypcji czatów
   const subscribeToChats = (chatIds: number[]) => {
     setSubscribedChats(chatIds);
+    subscribedChatsRef.current = chatIds; // zawsze aktualny ref dla onopen
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       chatIds.forEach(chatId => {
         wsRef.current?.send(JSON.stringify({ type: 'SUBSCRIBE', chatId }));
@@ -65,8 +67,9 @@ export const WebSocketProvider = ({ children, userId }: { children: ReactNode; u
     wsRef.current = ws;
 
     ws.onopen = () => {
-      // Subskrybuj czaty jeśli są już znane
-      subscribedChats.forEach(chatId => {
+      // Używamy ref zamiast state — ref zawsze ma aktualną wartość,
+      // nawet jeśli onopen odpala się po tym jak subscribeToChats już zostało wywołane
+      subscribedChatsRef.current.forEach(chatId => {
         ws?.send(JSON.stringify({ type: 'SUBSCRIBE', chatId }));
       });
     };
