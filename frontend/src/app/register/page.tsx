@@ -1266,7 +1266,7 @@ function CompanyRegistrationForm() {
           formDataToSend.append('companyLogo', formData.companyLogo);
         }
 
-        const response = await fetch(`${environment.apiUrl}/registerCompany`, {
+        const response = await fetch(`${environment.apiUrl}/api/registerCompany`, {
           method: 'POST',
           body: formDataToSend,
           mode: 'cors'
