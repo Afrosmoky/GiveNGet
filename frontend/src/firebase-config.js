@@ -1,6 +1,3 @@
-import { initializeApp } from 'firebase/app';
-import { getMessaging } from 'firebase/messaging';
-
 // const firebaseConfig = {
 //   apiKey: "AIzaSyBtkl3lteGgpCnLyo3dOqkpiSTeYKTNp0o",
 //   authDomain: "gngdev-6fa84.firebaseapp.com",
@@ -26,12 +23,14 @@ export async function loadFirebase() {
   }
 
   try {
-    // Inicjalizujemy aplikację Firebase
+    // Dynamiczne importy — firebase/messaging jest browser-only i nie może być
+    // ładowany statycznie na poziomie modułu (crashuje SSR w Node.js)
+    const { initializeApp } = await import('firebase/app');
+    const { getMessaging } = await import('firebase/messaging');
+
     const app = initializeApp(firebaseConfig);
-    
-    // Pobieramy instancję usługi Messaging
     const messaging = getMessaging(app);
-    
+
     console.log('FCM: Firebase zainicjalizowany z pakietów npm', { app, messaging });
     return { app, messaging };
   } catch (error) {
