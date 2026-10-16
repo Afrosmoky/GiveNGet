@@ -34,6 +34,7 @@ import com.example.gng.user.dto.UpdateAddressDto;
 import com.example.gng.register.company.dto.RegisterCompanyDTO;
 import com.example.gng.user.dto.UserData;
 import com.example.gng.user.register.dto.RegisterUserDTO;
+import com.example.gng.user.consent.RegistrationConsentPolicy;
 import com.example.gng.user.register.model.RegularUserModel;
 import com.example.gng.user.register.repository.RegularUserModelRepository;
 import com.example.gng.util.TemplateProcessor;
@@ -43,6 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mail.MailException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -75,6 +77,7 @@ public class UserService {
     private final UserRateRepository userRateRepository;
     private final PasswordEncoder passwordEncoder;
     private final FileStorageService fileStorageService;
+    private final RegistrationConsentPolicy registrationConsentPolicy;
     private final String frontAppUrl;
 
     @Autowired
@@ -84,6 +87,7 @@ public class UserService {
                        RegisterCodeModelRepository registerCodeModelRepository,
                        ResetPasswordCodeModelRepository resetPasswordCodeModelRepository, UserRateRepository userRateRepository,
                        PasswordEncoder passwordEncoder, FileStorageService fileStorageService,
+                       RegistrationConsentPolicy registrationConsentPolicy,
                        @Value("${front.app.url}") String frontAppUrl) {
         this.emailSenderService = emailSenderService;
         this.mailTemplateRepository = mailTemplateRepository;
@@ -96,6 +100,7 @@ public class UserService {
         this.userRateRepository = userRateRepository;
         this.passwordEncoder = passwordEncoder;
         this.fileStorageService = fileStorageService;
+        this.registrationConsentPolicy = registrationConsentPolicy;
         this.frontAppUrl = frontAppUrl;
     }
 
@@ -120,6 +125,23 @@ public class UserService {
         String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
         //TODO zmiana przy dodaniu lokalizacji
         emailSenderService.sendEmail(user.getEmail(), "Potwierdzenie rejestracji", filledTemplate, null);
+    }
+
+    /**
+     * Wysyłka maila aktywacyjnego przy rejestracji — nieblokująca. Błąd SMTP nie cofa rejestracji:
+     * konto zostaje niezweryfikowane, a kod aktywacyjny jest już zapisany, więc działa ponowna wysyłka.
+     * Łapiemy tylko MailException — szerszy catch połknąłby błędy repozytorium, które w transakcji
+     * i tak oznaczają ją do wycofania.
+     */
+    private boolean trySendVerifyEmail(UserModel user) {
+        try {
+            sendVerifyEmail(user);
+            return true;
+        } catch (MailException e) {
+            log.warn("Nie udało się wysłać maila aktywacyjnego (email: {}, typ konta: {}) — rejestracja zakończona, konto niezweryfikowane",
+                    user.getEmail(), user.getType(), e);
+            return false;
+        }
     }
 
     private void sendResetPasswordEmail(UserModel user) {
@@ -175,8 +197,10 @@ public class UserService {
         return map;
     }
 
-    public void registerUser(RegisterUserDTO registerUserDTO, MultipartFile profilePhoto) {
+    public boolean registerUser(RegisterUserDTO registerUserDTO, MultipartFile profilePhoto) {
         RegularUserModel regularUserModel = new RegularUserModel();
+        // Przed jakimkolwiek zapisem — rejestracja bez zgód nie może zostawić konta w bazie
+        registrationConsentPolicy.requireAndApply(registerUserDTO, regularUserModel);
         regularUserModel.setEmail(registerUserDTO.getEmail());
         regularUserModel.setPassword(passwordEncoder.encode(registerUserDTO.getPassword()));
         regularUserModel.setVerified(false);
@@ -195,7 +219,6 @@ public class UserService {
         try {
             savedUser = regularUserModelRepository.save(regularUserModel);
             setAvatar(profilePhoto, savedUser);
-            sendVerifyEmail(savedUser);
         } catch (DataIntegrityViolationException e) {
             if (e.getMessage().contains("Duplicate entry")) {
                 log.error(e.getMessage());
@@ -206,6 +229,8 @@ public class UserService {
             log.error(e.getMessage());
             throw new RuntimeException("Wystąpił nieznany błąd. Spróbuj ponownie później lub skontaktuj się z administratorem");
         }
+
+        return trySendVerifyEmail(savedUser);
     }
 
     private void fillDefaultValuesByLocation(RegularUserModel regularUserModel, String address) {
@@ -227,8 +252,10 @@ public class UserService {
     }
 
     @Transactional
-    public void registerCompany(RegisterCompanyDTO registerCompanyDTO, MultipartFile companyLogo) {
+    public boolean registerCompany(RegisterCompanyDTO registerCompanyDTO, MultipartFile companyLogo) {
         BusinessUserModel businessUserModel = new BusinessUserModel();
+        // Przed jakimkolwiek zapisem — rejestracja bez zgód nie może zostawić konta w bazie
+        registrationConsentPolicy.requireAndApply(registerCompanyDTO, businessUserModel);
         businessUserModel.setEmail(registerCompanyDTO.getEmail());
         businessUserModel.setPassword(passwordEncoder.encode(registerCompanyDTO.getPassword()));
         businessUserModel.setVerified(false);
@@ -274,7 +301,7 @@ public class UserService {
 
         savedUser = businessUserModelRepository.save(savedUser);
 
-        sendVerifyEmail(savedUser);
+        return trySendVerifyEmail(savedUser);
     }
 
     Set<TagModel> processTags(String tagsString) { // package-private dla testów
@@ -621,7 +648,6 @@ public class UserService {
         userData.setId(userModel.getId());
         userData.setUserRank(userModel.getUserRank());
         userData.setTrustPoints(userModel.getTrustPoints());
-        userData.setFreeOffersCount(userModel.getFreeOffersCount());
         return userData;
     }
 

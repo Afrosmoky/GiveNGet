@@ -1,6 +1,8 @@
 package com.example.gng.offer.service;
 
 import com.example.gng.auth.service.SessionService;
+import com.example.gng.common.exception.BadRequestException;
+import com.example.gng.common.exception.ForbiddenOperationException;
 import com.example.gng.exceptions.InvalidRequestException;
 import com.example.gng.geocode.dto.SimplifiedGeocodingResponse;
 import com.example.gng.geocode.service.GeoCodeService;
@@ -24,10 +26,13 @@ import com.example.gng.image.model.ImageEntity;
 import com.example.gng.image.repository.ImageModelRepository;
 import com.example.gng.file.service.FileStorageService;
 import com.example.gng.register.model.UserModel;
+import com.example.gng.register.model.Currency;
 import com.example.gng.register.model.UserType;
 import com.example.gng.register.repository.UserRepository;
+import com.example.gng.reservation.repository.ReservationRepository;
 import com.example.gng.register.company.model.BusinessUserModel;
 import com.example.gng.register.company.repository.BusinessUserModelRepository;
+import org.hibernate.Hibernate;
 import com.example.gng.user.register.repository.RegularUserModelRepository;
 import com.example.gng.favorites.service.FavoriteOfferService;
 import com.example.gng.favorites.repository.FavoriteOfferRepository;
@@ -51,6 +56,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
@@ -71,6 +77,16 @@ public class OfferService {
 
     private static final Logger logger = LoggerFactory.getLogger(OfferService.class);
 
+    /** Domyślna liczba sztuk oferty, gdy klient nie przysłał pola quantity. */
+    static final int DEFAULT_QUANTITY = 1;
+
+    /** Waluta przyjmowana dla oferty sprzedażowej, gdy klient nie podał własnej. */
+    static final String DEFAULT_CURRENCY = "PLN";
+
+    /** Liczba miejsc po przecinku i górny limit z kolumny offer.price DECIMAL(10,2). */
+    private static final int PRICE_SCALE = 2;
+    private static final BigDecimal MAX_PRICE = new BigDecimal("99999999.99");
+
     private final OfferRepository offerRepository;
     private final CategoryEntityRepository categoryRepository;
     private final SubcategoryRepository subcategoryRepository;
@@ -90,6 +106,7 @@ public class OfferService {
     private final ForbiddenPatternService forbiddenPatternService;
     private final UserRankService userRankService;
     private final DashboardStatisticsService dashboardStatisticsService;
+    private final ReservationRepository reservationRepository;
 
     public OfferService(OfferRepository offerRepository,
                         CategoryEntityRepository categoryRepository,
@@ -107,6 +124,7 @@ public class OfferService {
                         ForbiddenPatternService forbiddenPatternService,
                         UserRankService userRankService,
                         DashboardStatisticsService dashboardStatisticsService,
+                        ReservationRepository reservationRepository,
                         @Value("${front.app.url}") String frontAppUrl) {
         this.offerRepository = offerRepository;
         this.categoryRepository = categoryRepository;
@@ -127,6 +145,156 @@ public class OfferService {
         this.forbiddenPatternService = forbiddenPatternService;
         this.userRankService = userRankService;
         this.dashboardStatisticsService = dashboardStatisticsService;
+        this.reservationRepository = reservationRepository;
+    }
+
+    /**
+     * Rozstrzygnięta cena oferty — para gotowa do zapisania na encji.
+     * Oba pola razem albo oba null; nie ma sensownego stanu „cena bez waluty".
+     */
+    public record OfferPricing(BigDecimal price, String currency) {
+        static OfferPricing none() {
+            return new OfferPricing(null, null);
+        }
+    }
+
+    /**
+     * Ustala cenę przy tworzeniu oferty (docs/05_DLUG_I_DECYZJE.md — decyzja o cenie).
+     *
+     * Oferta sprzedażowa musi mieć cenę dodatnią; brak waluty oznacza PLN.
+     * Oferta darmowa i wymiana nie mogą mieć ani ceny, ani waluty — inaczej w bazie
+     * powstałaby kwota, której nikt nigdy nie zapłaci, a raport policzyłby ją jako wartość.
+     */
+    public static OfferPricing resolvePricingForCreate(TransactionType type, BigDecimal price, String currency) {
+        if (type == TransactionType.sale) {
+            if (price == null) {
+                throw priceRequired();
+            }
+            return new OfferPricing(requireValidPrice(price), normalizeCurrency(currency));
+        }
+
+        requireNoPricing(type, price, currency);
+        return OfferPricing.none();
+    }
+
+    /**
+     * Ustala cenę przy edycji oferty.
+     *
+     * Semantyka null jak przy quantity: brak pola = bez zmian. Zmiana typu na darmowy
+     * lub wymianę czyści cenę i walutę, nawet jeśli klient pól nie przysłał — inaczej
+     * po przełączeniu typu oferta „za darmo" zostałaby z ceną z poprzedniej wersji.
+     */
+    static OfferPricing resolvePricingForUpdate(TransactionType type, BigDecimal price, String currency,
+                                                BigDecimal currentPrice, String currentCurrency) {
+        if (type != TransactionType.sale) {
+            requireNoPricing(type, price, currency);
+            return OfferPricing.none();
+        }
+
+        BigDecimal effectivePrice = price != null ? price : currentPrice;
+        if (effectivePrice == null) {
+            throw priceRequired();
+        }
+
+        String effectiveCurrency = hasText(currency) ? currency : currentCurrency;
+        return new OfferPricing(requireValidPrice(effectivePrice), normalizeCurrency(effectiveCurrency));
+    }
+
+    /**
+     * Sprawdza cenę i doprowadza ją do skali kolumny.
+     *
+     * Nadmiarowe miejsca po przecinku odrzucamy, a nie zaokrąglamy — ciche zmienianie
+     * komuś ceny jest gorsze niż odrzucenie żądania. Górny limit chroni przed 500
+     * z bazy przy przekroczeniu DECIMAL(10,2).
+     */
+    private static BigDecimal requireValidPrice(BigDecimal price) {
+        if (price.signum() <= 0) {
+            throw new BadRequestException("INVALID_PRICE",
+                    "Cena musi być większa od zera.",
+                    Map.of("price", price.toPlainString()));
+        }
+        if (price.stripTrailingZeros().scale() > PRICE_SCALE) {
+            throw new BadRequestException("INVALID_PRICE",
+                    "Cena może mieć najwyżej 2 miejsca po przecinku.",
+                    Map.of("price", price.toPlainString(), "maxDecimals", PRICE_SCALE));
+        }
+        if (price.compareTo(MAX_PRICE) > 0) {
+            throw new BadRequestException("INVALID_PRICE",
+                    "Cena przekracza dopuszczalną wartość.",
+                    Map.of("price", price.toPlainString(), "maxPrice", MAX_PRICE.toPlainString()));
+        }
+        return price.setScale(PRICE_SCALE, RoundingMode.UNNECESSARY);
+    }
+
+    /**
+     * Waliduje walutę przeciw liście obsługiwanych przez system (enum Currency),
+     * a nie tylko przeciw formatowi — trzyliterowy kod spoza listy i tak nie ma
+     * pokrycia w cennikach ani w raporcie.
+     */
+    private static String normalizeCurrency(String currency) {
+        if (!hasText(currency)) {
+            return DEFAULT_CURRENCY;
+        }
+        String normalized = currency.trim().toUpperCase();
+        try {
+            return Currency.valueOf(normalized).name();
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("INVALID_CURRENCY",
+                    "Nieobsługiwana waluta.",
+                    Map.of("currency", normalized,
+                           "supported", java.util.Arrays.stream(Currency.values()).map(Enum::name).toList()));
+        }
+    }
+
+    private static void requireNoPricing(TransactionType type, BigDecimal price, String currency) {
+        if (price != null || hasText(currency)) {
+            throw new BadRequestException("PRICE_NOT_ALLOWED_FOR_FREE",
+                    "Oferta bez sprzedaży nie może mieć ceny ani waluty.",
+                    Map.of("offerType", type != null ? type.name() : "null"));
+        }
+    }
+
+    private static BadRequestException priceRequired() {
+        return new BadRequestException("PRICE_REQUIRED",
+                "Oferta sprzedażowa wymaga podania ceny.",
+                Map.of("offerType", TransactionType.sale.name()));
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /**
+     * Ustala liczbę sztuk przy tworzeniu oferty.
+     * Brak wartości = 1 (zgodność wsteczna z klientami, które pola nie wysyłają).
+     */
+    public static int resolveQuantityForCreate(Integer requested) {
+        if (requested == null) {
+            return DEFAULT_QUANTITY;
+        }
+        return requireNonNegativeQuantity(requested);
+    }
+
+    /**
+     * Ustala liczbę sztuk przy edycji oferty.
+     * Brak wartości = bez zmian, żeby starsi klienci nie nadpisywali ilości.
+     */
+    static int resolveQuantityForUpdate(Integer requested, Integer current) {
+        if (requested == null) {
+            return current != null ? current : DEFAULT_QUANTITY;
+        }
+        return requireNonNegativeQuantity(requested);
+    }
+
+    /**
+     * Walidacja egzekwowana w serwisie, a nie tylko przez @Min na DTO — endpoint edycji
+     * oferty binduje @ModelAttribute bez @Valid, więc adnotacje same nie wystarczą.
+     */
+    private static int requireNonNegativeQuantity(int quantity) {
+        if (quantity < 0) {
+            throw new InvalidRequestException("Ilość sztuk nie może być ujemna");
+        }
+        return quantity;
     }
 
     public String createOffer(CreateOfferDTO createOfferDTO, List<MultipartFile> images) {
@@ -138,6 +306,17 @@ public class OfferService {
 
         UserModel currentUser = userRepository.findByEmail(currentUserEmail)
                 .orElseThrow(() -> new InvalidRequestException("Nie znaleziono użytkownika"));
+
+        // Pracownik sklepu nie wystawia ofert. createOffer przypisuje ofertę do konta
+        // wywołującego, więc oferta dodana przez pracownika należałaby do niego, a nie do
+        // sklepu — a od właściciela oferty zależy zarówno autoryzacja potwierdzenia odbioru
+        // (firma pracownika == właściciel oferty), jak i przypisanie w raporcie oszczędności.
+        // Taka oferta byłaby więc nieodbieralna i niewidoczna w raporcie sklepu.
+        if (currentUser.getType() == UserType.STORE_EMPLOYEE) {
+            throw new ForbiddenOperationException(
+                    "Konto pracownika sklepu nie może wystawiać ofert.",
+                    java.util.Map.of("userType", currentUser.getType().name()));
+        }
 
         // Sprawdź czy użytkownik może utworzyć nową ofertę
         if (!userRankService.canCreateOffer(currentUser)) {
@@ -184,6 +363,12 @@ public class OfferService {
         offer.setUser(currentUser); // Przypisz użytkownika do oferty
         offer.setPickupDateFrom(createOfferDTO.getPickupTimeFrom());
         offer.setPickupDateTo(createOfferDTO.getPickupTimeTo());
+        offer.setQuantity(resolveQuantityForCreate(createOfferDTO.getQuantity()));
+
+        OfferPricing pricing = resolvePricingForCreate(
+                createOfferDTO.getOfferType(), createOfferDTO.getPrice(), createOfferDTO.getCurrency());
+        offer.setPrice(pricing.price());
+        offer.setCurrency(pricing.currency());
 
         // Moderacja: jeśli treść zawiera słowa/regexy zakazane, ustaw status na PENDING
         boolean containsForbidden = forbiddenPatternService.containsForbiddenContent(
@@ -320,13 +505,52 @@ public class OfferService {
         // Sprawdź które oferty są w ulubionych (jedno zapytanie do bazy)
         Set<String> favoriteOfferIds = favoriteOfferService.getFavoriteOfferIds(currentUser, offerIds);
 
+        // Policz zablokowane sztuki dla całej listy (jedno zapytanie zamiast jednego na ofertę)
+        LocalDateTime now = nowUtc();
+        Map<String, Integer> reservedByOffer = reservedQuantities(offerIds, now);
+
         // Mapuj oferty na preview z informacją o ulubionych
         return filteredOffers.stream()
-                .map(e -> getOfferPreview(e, lat, lon, distanceUnit, favoriteOfferIds))
+                .map(e -> getOfferPreview(e, lat, lon, distanceUnit, favoriteOfferIds, reservedByOffer))
                 //sortujemy oferty: najpierw recommended=true, potem po odległości
                 .sorted(Comparator.comparing(OfferPreview::getRecommended).reversed()
                         .thenComparing(OfferPreview::getDistance, new DistanceStringNumericComparator()))
                 .toList();
+    }
+
+    /**
+     * Sumy sztuk zajmujących stan dla wielu ofert — jedno zapytanie
+     * na całą listę, nie jedno na ofertę. Ten sam wzorzec, co batchowe sprawdzanie ulubionych.
+     */
+    private Map<String, Integer> reservedQuantities(List<String> offerIds, LocalDateTime now) {
+        if (offerIds == null || offerIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Integer> reservedByOffer = new HashMap<>();
+        for (Object[] row : reservationRepository.sumOccupiedQuantityByOfferIds(offerIds, now)) {
+            reservedByOffer.put((String) row[0], ((Number) row[1]).intValue());
+        }
+        return reservedByOffer;
+    }
+
+    /**
+     * Dostępność oferty = quantity minus sztuki zajmujące stan, czyli rezerwacje
+     * RESERVED przed terminem i COLLECTED (docs/04_REZERWACJE_DESIGN.md, sekcja 1).
+     * Nie trzymamy tego jako pola encji,
+     * żeby nie dopuścić do rozjazdu z rzeczywistym stanem rezerwacji.
+     *
+     * @param reservedByOffer wcześniej policzone sumy; null oznacza „dolicz pojedynczym zapytaniem"
+     */
+    private int availableQuantity(OfferEntity offer, Map<String, Integer> reservedByOffer, LocalDateTime now) {
+        int total = offer.getQuantity() != null ? offer.getQuantity() : 0;
+        int reserved = reservedByOffer != null
+                ? reservedByOffer.getOrDefault(offer.getId(), 0)
+                : reservationRepository.sumOccupiedQuantityByOfferId(offer.getId(), now);
+        return Math.max(0, total - reserved);
+    }
+
+    private static LocalDateTime nowUtc() {
+        return LocalDateTime.now(ZoneOffset.UTC);
     }
 
     private OfferPreview getOfferPreview(OfferEntity offer, BigDecimal lat, BigDecimal lon, DistanceUnit distanceUnit) {
@@ -342,6 +566,11 @@ public class OfferService {
     }
 
     private OfferPreview getOfferPreview(OfferEntity offer, BigDecimal lat, BigDecimal lon, DistanceUnit distanceUnit, Set<String> favoriteOfferIds) {
+        return getOfferPreview(offer, lat, lon, distanceUnit, favoriteOfferIds, null);
+    }
+
+    private OfferPreview getOfferPreview(OfferEntity offer, BigDecimal lat, BigDecimal lon, DistanceUnit distanceUnit,
+                                         Set<String> favoriteOfferIds, Map<String, Integer> reservedByOffer) {
         OfferPreview preview = new OfferPreview();
         preview.setId(offer.getId());
         preview.setName(offer.getName());
@@ -358,8 +587,14 @@ public class OfferService {
         // Ustaw lokalizację na podstawie współrzędnych
         if (offer.getLatitude() != null && offer.getLongitude() != null) {
             //TODO do poprawy by nie musieć dla każdej oferty odpytywać zewnętrznego serwisu
-            SimplifiedGeocodingResponse geocoding = geoCodeService.searchByCoordinatesSimplified(offer.getLatitude().toString(), offer.getLongitude().toString());
-            preview.setLocation(geocoding.getCity());
+            // Nazwa miasta to dodatek do kafelka — awaria, limit albo zły klucz Geoapify nie może
+            // wywrócić całej listy ofert (wcześniej jeden błąd geokodowania dawał 500 dla całej strony)
+            try {
+                SimplifiedGeocodingResponse geocoding = geoCodeService.searchByCoordinatesSimplified(offer.getLatitude().toString(), offer.getLongitude().toString());
+                preview.setLocation(geocoding.getCity());
+            } catch (RuntimeException e) {
+                logger.warn("Geokodowanie oferty {} nie powiodło się — kafelek bez nazwy miasta: {}", offer.getId(), e.getMessage());
+            }
         }
 
         // Ustaw URL obrazu jeśli oferta ma obrazy
@@ -373,8 +608,28 @@ public class OfferService {
         // Ustaw pole recommended
         preview.setRecommended(offer.getRecommended());
 
+        // Cena i waluta (null dla ofert darmowych i wymian)
+        preview.setPrice(offer.getPrice());
+        preview.setCurrency(offer.getCurrency());
+
+        // Ustaw liczbę sztuk i dostępność (quantity minus sztuki zajęte rezerwacjami)
+        preview.setQuantity(offer.getQuantity());
+        preview.setAvailableQuantity(availableQuantity(offer, reservedByOffer, nowUtc()));
+
         // Ustaw status oferty
         preview.setStatus(offer.getStatus());
+
+        // Sprzedawca — do linku na profil sklepu z kafelka. Nazwę podajemy tylko dla firm:
+        // imię i nazwisko osoby prywatnej nie musi wisieć na każdym kafelku listy.
+        UserModel seller = offer.getUser();
+        if (seller != null) {
+            preview.setSellerId(seller.getId());
+            preview.setSellerType(seller.getType());
+            if (seller.getType() == UserType.COMPANY
+                    && Hibernate.unproxy(seller) instanceof BusinessUserModel company) {
+                preview.setStoreName(company.getCompanyName());
+            }
+        }
 
         // Ustaw ID kategorii i podkategorii
         if (offer.getCategory() != null) {
@@ -507,9 +762,12 @@ public class OfferService {
         // Sprawdź które oferty są w ulubionych (jedno zapytanie do bazy)
         Set<String> favoriteOfferIds = favoriteOfferService.getFavoriteOfferIds(currentUser, offerIds);
 
+        // Policz zablokowane sztuki dla całej listy (jedno zapytanie zamiast jednego na ofertę)
+        Map<String, Integer> reservedByOffer = reservedQuantities(offerIds, nowUtc());
+
         // Mapuj oferty na preview z informacją o ulubionych
         return filteredOffers.stream()
-                .map(e -> getOfferPreview(e, finalLat, finalLon, distanceUnit, favoriteOfferIds))
+                .map(e -> getOfferPreview(e, finalLat, finalLon, distanceUnit, favoriteOfferIds, reservedByOffer))
                 //sortujemy oferty: najpierw recommended=true, potem po odległości
                 .sorted(Comparator.comparing(OfferPreview::getRecommended).reversed()
                         .thenComparing(OfferPreview::getDistance, new DistanceStringNumericComparator()))
@@ -600,7 +858,9 @@ public class OfferService {
         details.setLatitude(offer.getLatitude());
         details.setLongitude(offer.getLongitude());
         details.setLocation(offer.getLocation());
-        
+        details.setQuantity(offer.getQuantity());
+        details.setAvailableQuantity(availableQuantity(offer, null, nowUtc()));
+
         // Kategoria i podkategoria
         if (offer.getCategory() != null) {
             details.setCategoryId(offer.getCategory().getId());
@@ -663,8 +923,30 @@ public class OfferService {
     }
 
     public List<OfferPreview> getUserOffers(Long userId) {
-        List<OfferEntity> offers = offerRepository.findByUser(userId);
+        return toPreviews(offerRepository.findByUser(userId)).stream()
+                .sorted(Comparator.comparing(OfferPreview::getName))
+                .collect(Collectors.toList());
+    }
 
+    /**
+     * Oferty widoczne dla odwiedzających publiczny profil: tylko ACTIVE. Zatrzymane przez
+     * moderację (PENDING), zablokowane i nieaktywne nie mogą wyciekać na zewnątrz —
+     * właściciel ma pełną listę w panelu (/api/offer/my).
+     */
+    public List<OfferPreview> getActiveUserOffers(Long userId) {
+        List<OfferEntity> active = offerRepository.findByUser(userId).stream()
+                .filter(offer -> offer.getStatus() == OfferStatus.ACTIVE)
+                .toList();
+        return toPreviews(active).stream()
+                .sorted(Comparator.comparing(OfferPreview::getName))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Mapuje listę ofert na podglądy z zachowaniem kolejności wejścia. Ulubione i zajęte
+     * sztuki liczone są wsadowo (po jednym zapytaniu na całą listę), a nie per oferta.
+     */
+    public List<OfferPreview> toPreviews(List<OfferEntity> offers) {
         // Pobierz aktualnie zalogowanego użytkownika (tylko raz)
         UserModel currentUser = getCurrentUser();
 
@@ -676,9 +958,11 @@ public class OfferService {
         // Sprawdź które oferty są w ulubionych (jedno zapytanie do bazy)
         Set<String> favoriteOfferIds = favoriteOfferService.getFavoriteOfferIds(currentUser, offerIds);
 
+        // Policz zablokowane sztuki dla całej listy (jedno zapytanie zamiast jednego na ofertę)
+        Map<String, Integer> reservedByOffer = reservedQuantities(offerIds, nowUtc());
+
         return offers.stream()
-                .map(e -> getOfferPreview(e, null, null, null, favoriteOfferIds))
-                .sorted(Comparator.comparing(OfferPreview::getName))
+                .map(e -> getOfferPreview(e, null, null, null, favoriteOfferIds, reservedByOffer))
                 .collect(Collectors.toList());
     }
 
@@ -764,6 +1048,13 @@ public class OfferService {
         offer.setPickupDateTo(updateOfferDTO.getPickupTimeTo());
         offer.setCategory(category);
         offer.setSubcategory(subcategory);
+        offer.setQuantity(resolveQuantityForUpdate(updateOfferDTO.getQuantity(), offer.getQuantity()));
+
+        OfferPricing pricing = resolvePricingForUpdate(
+                transactionType, updateOfferDTO.getPrice(), updateOfferDTO.getCurrency(),
+                offer.getPrice(), offer.getCurrency());
+        offer.setPrice(pricing.price());
+        offer.setCurrency(pricing.currency());
 
         if (latitude != null && longitude != null) {
             offer.setLatitude(latitude);

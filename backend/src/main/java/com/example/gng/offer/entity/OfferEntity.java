@@ -74,6 +74,14 @@ public class OfferEntity {
     @Column(name = "recommended", nullable = false)
     private Boolean recommended = false;
 
+    /**
+     * Liczba sztuk dostawionych do oferty. Jednostka: sztuka.
+     * Wartość >= 0, domyślnie 1. Dostępność (quantity minus aktywne rezerwacje)
+     * jest wyliczana osobno — nie trzymamy jej jako pola.
+     */
+    @Column(name = "quantity", nullable = false)
+    private Integer quantity = 1;
+
     @Column(name = "pickup_date_from")
     private String pickupDateFrom;
 
@@ -97,6 +105,9 @@ public class OfferEntity {
         }
         if (recommended == null) {
             recommended = false;
+        }
+        if (quantity == null) {
+            quantity = 1;
         }
         if (status == null) {
             status = OfferStatus.ACTIVE;

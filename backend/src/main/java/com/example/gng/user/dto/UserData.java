@@ -18,5 +18,4 @@ public class UserData {
     private UserType userType;
     private UserRank userRank;
     private Integer trustPoints;
-    private Integer freeOffersCount;
 }

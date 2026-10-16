@@ -8,6 +8,7 @@ import { FaLocationCrosshairs } from 'react-icons/fa6';
 import { environment } from '../../config';
 import { AuthGuard } from '../../components/AuthGuard';
 import LocationMapModal from '../../components/LocationMapModal';
+import { describeApiError } from '../../utils/apiErrors';
 
 // Typy rejestracji
 type RegistrationType = 'user' | 'company';
@@ -22,6 +23,47 @@ interface LocationSuggestion {
     lon: number;
     lat: number;
     formatted: string;
+}
+
+const CONSENT_REQUIRED_MESSAGE = 'Aby założyć konto, zaakceptuj regulamin i politykę prywatności.';
+
+/**
+ * Obowiązkowa zgoda przy rejestracji (docs/08, pozycja 2). Jeden checkbox obejmuje regulamin
+ * i politykę prywatności; backend zapisuje je osobno i sam egzekwuje (CONSENT_REQUIRED).
+ * Linki otwierają się w nowej karcie, żeby nie zgubić wypełnionego formularza.
+ */
+function ConsentCheckbox({ checked, error, onChange }: { checked: boolean; error: string; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="mb-5">
+      <label htmlFor="consent" className="flex cursor-pointer items-start gap-3 text-sm text-gray-700">
+        <input
+          id="consent"
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-invalid={error !== ''}
+          aria-describedby={error ? 'consent-error' : undefined}
+          className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-gray-300 accent-yellow-400"
+        />
+        <span>
+          Akceptuję{' '}
+          <Link href="/static-content/terms-of-service" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-gray-900">
+            regulamin
+          </Link>{' '}
+          i{' '}
+          <Link href="/static-content/privacy-policy" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-gray-900">
+            politykę prywatności
+          </Link>
+          . <span className="text-red-600" aria-hidden="true">*</span>
+        </span>
+      </label>
+      {error && (
+        <div id="consent-error" role="alert" className="mt-1 text-xs text-red-600">
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RegisterPageContent() {
@@ -128,6 +170,8 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentError, setConsentError] = useState('');
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -404,8 +448,11 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
     setErrors(newErrors);
     
     const hasErrors = Object.values(newErrors).some(error => error !== '');
+    // Zgoda jest wymagana — bez niej nie wysyłamy (backend i tak odrzuci z CONSENT_REQUIRED)
+    const consentMissing = !consentAccepted;
+    setConsentError(consentMissing ? CONSENT_REQUIRED_MESSAGE : '');
     
-    if (!hasErrors) {
+    if (!hasErrors && !consentMissing) {
       setIsSubmitting(true);
       
       try {
@@ -419,6 +466,8 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
         formDataToSend.append('password', formData.password);
         formDataToSend.append('address', formData.localization);
         formDataToSend.append('bio', formData.bio);
+        formDataToSend.append('termsAccepted', String(consentAccepted));
+        formDataToSend.append('privacyAccepted', String(consentAccepted));
         
         // Dodajemy współrzędne geograficzne
         if (formData.lat !== undefined && formData.lon !== undefined) {
@@ -442,7 +491,7 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
           const errorData = await response.text();
           setSubmitMessage({
             type: 'error',
-            text: errorData || `Błąd serwera: ${response.status}`
+            text: describeApiError(errorData, `Błąd serwera: ${response.status}`)
           });
         }
         
@@ -817,6 +866,15 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
           )}
         </div>
 
+        <ConsentCheckbox
+          checked={consentAccepted}
+          error={consentError}
+          onChange={(checked) => {
+            setConsentAccepted(checked);
+            if (checked) setConsentError('');
+          }}
+        />
+
         {/* Komunikat o wyniku wysyłania */}
         {submitMessage && (
           <div className={`message-box ${submitMessage.type} mb-5 text-center`}>
@@ -873,6 +931,8 @@ function CompanyRegistrationForm() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentError, setConsentError] = useState('');
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const companyLogoInputRef = useRef<HTMLInputElement>(null);
 
@@ -1239,8 +1299,11 @@ function CompanyRegistrationForm() {
 
     const secondStepErrors = [newErrors.firstName, newErrors.lastName, newErrors.email, newErrors.phoneNumber, newErrors.password];
     const hasErrors = secondStepErrors.some(error => error !== '');
+    // Zgoda jest wymagana — bez niej nie wysyłamy (backend i tak odrzuci z CONSENT_REQUIRED)
+    const consentMissing = !consentAccepted;
+    setConsentError(consentMissing ? CONSENT_REQUIRED_MESSAGE : '');
 
-    if (!hasErrors) {
+    if (!hasErrors && !consentMissing) {
       setIsSubmitting(true);
 
       try {
@@ -1271,6 +1334,8 @@ function CompanyRegistrationForm() {
         formDataToSend.append('phoneNumber', formData.phoneNumber);
         formDataToSend.append('password', formData.password);
         formDataToSend.append('address', formData.localization);
+        formDataToSend.append('termsAccepted', String(consentAccepted));
+        formDataToSend.append('privacyAccepted', String(consentAccepted));
 
         if (formData.companyLogo) {
           formDataToSend.append('companyLogo', formData.companyLogo);
@@ -1291,7 +1356,7 @@ function CompanyRegistrationForm() {
           const errorData = await response.text();
           setSubmitMessage({
             type: 'error',
-            text: errorData || `Błąd serwera: ${response.status}`
+            text: describeApiError(errorData, `Błąd serwera: ${response.status}`)
           });
         }
 
@@ -1863,6 +1928,17 @@ function CompanyRegistrationForm() {
             </button>
           </div>
         </>
+      )}
+
+      {currentStep === 2 && (
+        <ConsentCheckbox
+          checked={consentAccepted}
+          error={consentError}
+          onChange={(checked) => {
+            setConsentAccepted(checked);
+            if (checked) setConsentError('');
+          }}
+        />
       )}
 
       {/* Komunikat o wyniku wysyłania */}

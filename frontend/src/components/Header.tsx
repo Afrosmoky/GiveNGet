@@ -544,6 +544,126 @@ export const Header: React.FC = () => {
                       )}
                     </button>
                     
+                    {/* Moje rezerwacje — tylko konto konsumenckie, bo tylko ono może rezerwować.
+                        Styl inline, spójnie z pozostałymi pozycjami tego dropdownu. */}
+                    {userData?.userType === 'REGULAR' && (
+                      <button
+                        onClick={() => { router.push('/reservations'); setShowDropdown(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: '#2d3748',
+                          borderBottom: '1px solid #e2e8f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        🧾 Moje rezerwacje
+                      </button>
+                    )}
+
+                    {/* Raport oszczędności — firma widzi swój sklep, admin całą platformę.
+                        Styl inline, spójnie z pozostałymi pozycjami tego dropdownu. */}
+                    {(userData?.userType === 'COMPANY' || userData?.userType === 'ADMIN') && (
+                      <button
+                        onClick={() => { router.push('/reports/savings'); setShowDropdown(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: '#2d3748',
+                          borderBottom: '1px solid #e2e8f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        📊 Raport oszczędności
+                      </button>
+                    )}
+
+                    {/* Import ofert z Excela — wyłącznie konto firmowe (oferty należą do sklepu).
+                        Styl inline, spójnie z pozostałymi pozycjami tego dropdownu. */}
+                    {userData?.userType === 'COMPANY' && (
+                      <button
+                        onClick={() => { router.push('/offers/import'); setShowDropdown(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: '#2d3748',
+                          borderBottom: '1px solid #e2e8f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        📥 Import ofert z Excela
+                      </button>
+                    )}
+
+                    {/* Pracownicy sklepu — zakładanie kont i odbieranie dostępu, tylko konto firmowe.
+                        Styl inline, spójnie z pozostałymi pozycjami tego dropdownu. */}
+                    {userData?.userType === 'COMPANY' && (
+                      <button
+                        onClick={() => { router.push('/store/employees'); setShowDropdown(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: '#2d3748',
+                          borderBottom: '1px solid #e2e8f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        👥 Pracownicy sklepu
+                      </button>
+                    )}
+
+                    {/* Panel pracownika sklepu — potwierdzanie odbioru rezerwacji.
+                        Styl inline, spójnie z pozostałymi pozycjami tego dropdownu. */}
+                    {userData?.userType === 'STORE_EMPLOYEE' && (
+                      <button
+                        onClick={() => { router.push('/store/pickup'); setShowDropdown(false); }}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: '#2d3748',
+                          borderBottom: '1px solid #e2e8f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        📷 Potwierdzanie odbioru
+                      </button>
+                    )}
+
                     {/* Przycisk Panel administracyjny dla ról EMPLOYEE i ADMIN */}
                     {(userData?.userType === 'EMPLOYEE' || userData?.userType === 'ADMIN') && (
                       <button

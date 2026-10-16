@@ -14,6 +14,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  // Statystyki platformy są tylko dla ADMIN — moderator (EMPLOYEE) nie widzi pozycji w menu
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   // Sprawdź autoryzację tylko po stronie klienta
   useEffect(() => {
@@ -31,6 +33,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         return;
       }
 
+      setIsPlatformAdmin(userData.userType === 'ADMIN');
       setIsAuthorized(true);
       setIsLoading(false);
     };
@@ -53,6 +56,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   const navigationItems = [
+    ...(isPlatformAdmin
+      ? [{
+          name: 'Statystyki pilotażu',
+          href: '/admin/stats',
+          icon: '📈',
+          description: 'Użytkownicy, sklepy, rezerwacje, odbiory'
+        }]
+      : []),
     {
       name: 'Słowa zakazane',
       href: '/admin/forbidden-words',

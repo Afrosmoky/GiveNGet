@@ -7,6 +7,7 @@ import { authorizedFetch, getUserData } from '../../utils/auth';
 import { AuthGuard } from '../../components/AuthGuard';
 import { OfferForm } from '../../components/OfferForm';
 import { TransactionType } from '../../types/offer';
+import { describeApiError, parseApiError } from '../../utils/apiErrors';
 
 interface OfferFormData {
   categoryId: number;
@@ -18,6 +19,8 @@ interface OfferFormData {
   coordinates?: string;
   description: string;
   offerType: TransactionType;
+  price?: string;
+  currency?: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
   expiryDate: Date | null;
@@ -62,6 +65,14 @@ function CreateOfferPageContent() {
       if (formData.coordinates) formDataToSend.append('coordinates', formData.coordinates);
       formDataToSend.append('description', formData.description);
       formDataToSend.append('offerType', formData.offerType);
+      // Cena tylko dla ofert sprzedażowych — dla pozostałych typów backend odrzuca
+      // price/currency jako PRICE_NOT_ALLOWED_FOR_FREE
+      if (formData.offerType === 'sale') {
+        if (formData.price) {
+          formDataToSend.append('price', formData.price.trim().replace(',', '.'));
+        }
+        formDataToSend.append('currency', formData.currency || 'PLN');
+      }
       formDataToSend.append('pickupTimeFrom', formData.pickupTimeFrom);
       formDataToSend.append('pickupTimeTo', formData.pickupTimeTo);
       if (formData.expiryDate) {
@@ -106,7 +117,14 @@ function CreateOfferPageContent() {
         }, 3000);
       } else {
         const errorText = await response.text();
-        
+
+        // Błędy /api/v1 i wyjątki domenowe mają kształt { code, message, details } —
+        // rozgałęziamy się po code, nie po treści komunikatu (CLAUDE.md 6.3)
+        const apiError = parseApiError(errorText);
+        if (apiError) {
+          throw new Error(describeApiError(errorText, 'Błąd tworzenia oferty'));
+        }
+
         // Obsługa nowych błędów walidacji typów transakcji
         if (response.status === 400) {
           if (errorText.includes('Typ transakcji') && errorText.includes('nie jest dozwolony')) {

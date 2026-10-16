@@ -474,6 +474,17 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
           <span>{userData.location || 'ADRES'}</span>
         </div>
       </div>
+      {/* Konto firmowe: aktualne oferty i dane sklepu żyją na stronie sklepu; tu zostają opinie */}
+      {userData.userType === 'COMPANY' && (
+        <Link
+          href={`/stores/${userData.id}`}
+          className="mb-6 flex w-full items-center justify-between gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-yellow-100"
+          style={{ maxWidth: computedSectionWidth }}
+        >
+          <span>🏪 Zobacz sklep i jego aktualne oferty</span>
+          <span aria-hidden="true">›</span>
+        </Link>
+      )}
       {/* OPIS */}
       {userData.description && (
         <div style={{ width: computedSectionWidth, minHeight: 80, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: isMobile ? 20 : 32, padding: isMobile ? 16 : 24, fontSize: 16 }}>

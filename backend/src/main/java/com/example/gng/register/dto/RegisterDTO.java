@@ -36,4 +36,13 @@ public class RegisterDTO {
     @NotBlank(message = "Hasło jest wymagane")
     @Size(min = 6, message = "Hasło musi mieć co najmniej 6 znaków")
     private String password;
+
+    /**
+     * Akceptacja regulaminu i polityki prywatności. Celowo bez adnotacji walidacyjnych —
+     * sprawdza je RegistrationConsentPolicy, żeby brak zgody dał kod CONSENT_REQUIRED
+     * (CLAUDE.md 6.3), a nie ogólny błąd walidacji formularza.
+     */
+    private Boolean termsAccepted;
+
+    private Boolean privacyAccepted;
 }

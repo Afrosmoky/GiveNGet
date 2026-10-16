@@ -9,7 +9,7 @@ export interface AuthTokenData {
   phoneNumber: string;
   id: number;
   profilePhotoUrl: string;
-  userType: 'REGULAR' | 'COMPANY' | 'EMPLOYEE' | 'ADMIN';
+  userType: 'REGULAR' | 'COMPANY' | 'EMPLOYEE' | 'STORE_EMPLOYEE' | 'ADMIN';
   lang: string;
   currency: string;
   lat: number;
@@ -57,7 +57,7 @@ export const getUserData = (): Partial<AuthTokenData> | null => {
     const token = localStorage.getItem('authToken');
     if (!token) return null;
 
-    const userType = localStorage.getItem('userType') as 'REGULAR' | 'COMPANY' | 'EMPLOYEE' | 'ADMIN' | null;
+    const userType = localStorage.getItem('userType') as 'REGULAR' | 'COMPANY' | 'EMPLOYEE' | 'STORE_EMPLOYEE' | 'ADMIN' | null;
 
     return {
       token,

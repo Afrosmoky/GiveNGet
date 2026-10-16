@@ -147,6 +147,18 @@ export function CompanyDashboard() {
     router.push('/offers/search');
   };
 
+  const handleSavingsReport = () => {
+    router.push('/reports/savings');
+  };
+
+  const handleOfferImport = () => {
+    router.push('/offers/import');
+  };
+
+  const handleStoreEmployees = () => {
+    router.push('/store/employees');
+  };
+
   // Funkcja pomocnicza do renderowania wykresu popularności
   const renderPopularityChart = () => {
     if (!data || !data.popularityOverTime) return null;
@@ -534,6 +546,98 @@ export function CompanyDashboard() {
             </div>
           </div>
         )}
+
+        {/* Raport oszczędności — osobna trasa, bo dostęp ma też ADMIN,
+            który nie widzi tego dashboardu. Styl inline, spójnie z otoczeniem. */}
+        <div
+          onClick={handleSavingsReport}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSavingsReport(); }}
+          style={{
+            marginBottom: '30px',
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            padding: '24px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#2d3748' }}>
+              📊 Raport oszczędności
+            </div>
+            <div style={{ fontSize: '14px', color: '#718096', marginTop: '4px' }}>
+              Ile towaru udało się uratować — z potwierdzonych odbiorów
+            </div>
+          </div>
+          <span style={{ fontSize: '20px', color: '#a0aec0' }}>›</span>
+        </div>
+
+        {/* Import ofert z Excela — masowe wystawienie asortymentu sklepu.
+            Styl inline, spójnie z kartą raportu powyżej. */}
+        <div
+          onClick={handleOfferImport}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOfferImport(); }}
+          style={{
+            marginBottom: '30px',
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            padding: '24px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#2d3748' }}>
+              📥 Import ofert z Excela
+            </div>
+            <div style={{ fontSize: '14px', color: '#718096', marginTop: '4px' }}>
+              Wystaw wiele ofert naraz z pliku .xlsx
+            </div>
+          </div>
+          <span style={{ fontSize: '20px', color: '#a0aec0' }}>›</span>
+        </div>
+
+        {/* Pracownicy sklepu — konta potwierdzające odbiory. Styl inline, spójnie z kartami powyżej. */}
+        <div
+          onClick={handleStoreEmployees}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleStoreEmployees(); }}
+          style={{
+            marginBottom: '30px',
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            padding: '24px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#2d3748' }}>
+              👥 Pracownicy sklepu
+            </div>
+            <div style={{ fontSize: '14px', color: '#718096', marginTop: '4px' }}>
+              Załóż konta do potwierdzania odbiorów i zarządzaj dostępem
+            </div>
+          </div>
+          <span style={{ fontSize: '20px', color: '#a0aec0' }}>›</span>
+        </div>
 
         {/* Przyciski akcji */}
         <div style={{

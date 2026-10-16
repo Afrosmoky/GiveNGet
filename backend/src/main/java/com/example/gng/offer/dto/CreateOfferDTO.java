@@ -1,11 +1,15 @@
 package com.example.gng.offer.dto;
 
 import com.example.gng.offer.entity.TransactionType;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Data
@@ -40,5 +44,25 @@ public class CreateOfferDTO {
 
     @NotNull(message = "Data wygaśnięcia jest wymagana")
     private LocalDate expiryDate;
+
+    /**
+     * Liczba sztuk (jednostka: sztuka). Pole opcjonalne — brak wartości oznacza 1,
+     * dzięki czemu starsi klienci, którzy go nie wysyłają, działają bez zmian.
+     */
+    @Min(value = 0, message = "Ilość sztuk nie może być ujemna")
+    private Integer quantity;
+
+    /**
+     * Cena za sztukę. Wymagana dla oferty sprzedażowej, zabroniona dla darmowej i wymiany.
+     * Reguły egzekwuje OfferService — adnotacje są kontraktem dla klienta.
+     * Digits odpowiada kolumnie DECIMAL(10,2).
+     */
+    @DecimalMin(value = "0.01", message = "Cena musi być większa od zera")
+    @Digits(integer = 8, fraction = 2, message = "Cena może mieć najwyżej 2 miejsca po przecinku")
+    private BigDecimal price;
+
+    /** Waluta ceny (ISO 4217). Brak wartości przy sprzedaży oznacza PLN. */
+    @Pattern(regexp = "^[A-Za-z]{3}$", message = "Waluta musi być trzyliterowym kodem ISO 4217")
+    private String currency;
 
 }

@@ -14,11 +14,13 @@ import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.LocalDate;
 import com.example.gng.user.entity.UserRank;
 
@@ -96,4 +98,28 @@ public class UserModel {
 
     @Column(name = "last_offers_reset_date")
     private LocalDate lastOffersResetDate = LocalDate.now();
+
+    /** Wersja regulaminu zaakceptowana przy rejestracji; null dla kont sprzed wprowadzenia zgód. */
+    @Column(name = "terms_accepted_version")
+    private String termsAcceptedVersion;
+
+    /** Moment akceptacji regulaminu (UTC). */
+    @Column(name = "terms_accepted_at")
+    private LocalDateTime termsAcceptedAt;
+
+    /** Moment akceptacji polityki prywatności (UTC). */
+    @Column(name = "privacy_accepted_at")
+    private LocalDateTime privacyAcceptedAt;
+
+    /**
+     * Data założenia konta (UTC). Kolumna ma DEFAULT CURRENT_TIMESTAMP, ale Hibernate wstawia
+     * jawnie null z pustego pola, więc default nigdy nie działał — ustawiamy ją sami.
+     * Tylko przy insercie: przy aktualizacji encja niesie wczytaną wartość.
+     */
+    @PrePersist
+    protected void initCreateDate() {
+        if (createDate == null) {
+            createDate = LocalDateTime.now(ZoneOffset.UTC);
+        }
+    }
 }

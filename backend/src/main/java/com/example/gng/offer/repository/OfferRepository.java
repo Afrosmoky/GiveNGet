@@ -3,7 +3,11 @@ package com.example.gng.offer.repository;
 import com.example.gng.offer.entity.OfferEntity;
 import com.example.gng.offer.entity.TransactionType;
 import com.example.gng.offer.entity.OfferStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OfferRepository extends JpaRepository<OfferEntity, String> {
@@ -56,6 +61,11 @@ public interface OfferRepository extends JpaRepository<OfferEntity, String> {
     @Query(value = "SELECT * FROM offer WHERE user_id = :userId", nativeQuery = true)
     List<OfferEntity> findByUser(Long userId);
 
+    /** Oferty danego właściciela w danym statusie — paginowane (publiczny profil sklepu). */
+    Page<OfferEntity> findByUser_IdAndStatus(Long userId, OfferStatus status, Pageable pageable);
+
+    long countByUser_IdAndStatus(Long userId, OfferStatus status);
+
     @Query("SELECT o FROM OfferEntity o WHERE o.expiryDate < :date AND o.status = :status")
     List<OfferEntity> findByExpiryDateBeforeAndStatus(@Param("date") LocalDate date, @Param("status") OfferStatus status);
 
@@ -78,4 +88,17 @@ public interface OfferRepository extends JpaRepository<OfferEntity, String> {
             @Param("subcategoryIds") List<Integer> subcategoryIds,
             @Param("createdAfter") LocalDateTime createdAfter,
             @Param("status") OfferStatus status);
+
+    /**
+     * Pobiera ofertę z pesymistyczną blokadą wiersza (SELECT ... FOR UPDATE).
+     *
+     * Wymaga aktywnej transakcji. Używane wyłącznie przy tworzeniu rezerwacji
+     * (docs/04_REZERWACJE_DESIGN.md, sekcja 2): blokada serializuje sprawdzenie
+     * dostępności i zapis, bez czego dwie równoczesne rezerwacje mogłyby przekroczyć
+     * stan magazynowy. Wolumen pilotażu jest niski, więc poprawność jest ważniejsza
+     * od przepustowości.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM OfferEntity o WHERE o.id = :offerId")
+    Optional<OfferEntity> findByIdForUpdate(@Param("offerId") String offerId);
 }

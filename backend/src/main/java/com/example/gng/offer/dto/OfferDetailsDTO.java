@@ -30,6 +30,8 @@ public class OfferDetailsDTO {
     private String location;
     private Integer categoryId;
     private Integer subcategoryId;
+    private Integer quantity; // Liczba sztuk wystawionych przez sprzedawcę
+    private Integer availableQuantity; // quantity minus sztuki zablokowane aktywnymi rezerwacjami
 
     // Lista zdjęć oferty
     private List<String> imageUrls;

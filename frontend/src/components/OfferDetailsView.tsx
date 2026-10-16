@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getImageUrl } from "../utils/imageUtils";
 import { environment } from "../config";
 import { authorizedFetch, getUserData } from "../utils/auth";
@@ -12,6 +13,7 @@ import FavoriteHeart from "./FavoriteHeart";
 import { FaMagnifyingGlass, FaXmark, FaPhone, FaArrowLeft, FaFlag } from "react-icons/fa6";
 import Image from "next/image";
 import UserRankBadge from "./UserRankBadge";
+import ReserveOfferPanel from "./ReserveOfferPanel";
 
 interface OfferDetails {
   id?: string;
@@ -38,6 +40,8 @@ interface OfferDetails {
   sellerRank?: string;
   sellerTrustPoints?: number;
   isFavorite?: boolean;
+  quantity?: number;
+  availableQuantity?: number;
 }
 
 interface OfferDetailsViewProps {
@@ -83,6 +87,16 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
   const userData = getUserData();
   const isAuthor = userData?.id === offer.sellerId;
   const isModeratorOrAdmin = userData?.userType === 'EMPLOYEE' || userData?.userType === 'ADMIN';
+
+  // Rezerwować może tylko konto konsumenckie (ROLE_USER wynika z UserType.REGULAR) i tylko
+  // cudzą ofertę. Firma, pracownik sklepu, moderator i admin zostaliby odrzuceni przez
+  // backend, więc nie pokazujemy im akcji, której nie wykonają.
+  const canReserve =
+    !isPreview &&
+    !isAuthor &&
+    Boolean(offer.id) &&
+    userData?.userType === 'REGULAR' &&
+    typeof offer.availableQuantity === 'number';
 
   // Funkcja do obsługi zgłaszania oferty
   const handleReportOffer = () => {
@@ -181,6 +195,19 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
                   Ważne do: {offer.expiryDate}
                 </span>
               )}
+              {typeof offer.availableQuantity === 'number' && (
+                <span
+                  className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
+                    offer.availableQuantity > 0
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  {offer.availableQuantity > 0
+                    ? `Dostępne: ${offer.availableQuantity} szt.`
+                    : 'Brak dostępności'}
+                </span>
+              )}
             </div>
             {offer.pickupDateFrom && offer.pickupDateTo && (
               <div className="mb-4">
@@ -188,6 +215,15 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
                 <div className="text-sm font-medium text-gray-900">
                   {offer.pickupDateFrom} - {offer.pickupDateTo}
                 </div>
+              </div>
+            )}
+            {canReserve && offer.id && (
+              <div className="mb-4">
+                <ReserveOfferPanel
+                  offerId={offer.id}
+                  availableQuantity={offer.availableQuantity as number}
+                  totalQuantity={offer.quantity ?? null}
+                />
               </div>
             )}
             {!isPreview && (
@@ -280,7 +316,13 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
                 className="w-16 h-16 rounded-full object-cover border border-gray-200"
               />
               <div>
-                <div className="font-bold text-gray-900">{offer.sellerName}</div>
+                {offer.sellerType === 'COMPANY' && offer.sellerId ? (
+                  <Link href={`/stores/${offer.sellerId}`} className="font-bold text-gray-900 hover:underline">
+                    {offer.sellerName}
+                  </Link>
+                ) : (
+                  <div className="font-bold text-gray-900">{offer.sellerName}</div>
+                )}
                 <div className="text-gray-500 text-sm">{offer.sellerType === 'COMPANY' ? 'Firma' : 'Osoba prywatna'}</div>
                 <div className="text-gray-500 text-xs">{offer.sellerPhoneNumber}</div>
                 
@@ -299,10 +341,12 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
                 {offer.sellerId && (
                   <button
                     className="mt-3 text-yellow-500 hover:underline font-medium text-xs"
-                    onClick={() => router.push(`/profile/${offer.sellerId}`)}
+                    onClick={() => router.push(
+                      offer.sellerType === 'COMPANY' ? `/stores/${offer.sellerId}` : `/profile/${offer.sellerId}`
+                    )}
                     type="button"
                   >
-                    Wyświetl profil sprzedającego
+                    {offer.sellerType === 'COMPANY' ? 'Zobacz sklep i jego oferty' : 'Wyświetl profil sprzedającego'}
                   </button>
                 )}
               </div>

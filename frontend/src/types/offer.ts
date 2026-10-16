@@ -117,6 +117,11 @@ export interface OfferTile {
   subcategoryId?: number;
   sellerRank?: UserRank;
   sellerTrustPoints?: number;
+  /** Właściciel oferty — link do profilu sklepu z kafelka. */
+  sellerId?: number;
+  sellerType?: 'REGULAR' | 'COMPANY' | string;
+  /** Nazwa firmy; wypełniana tylko dla sprzedawcy COMPANY. */
+  storeName?: string | null;
 }
 
 export interface OfferTileProps extends OfferTile {

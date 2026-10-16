@@ -171,7 +171,9 @@ function LoginPageContent() {
           console.log("Sukces:", result);
 
           // Walidacja userType
-          const validUserTypes = ['REGULAR', 'COMPANY', 'EMPLOYEE', 'ADMIN'];
+          // STORE_EMPLOYEE = pracownik sklepu (potwierdzanie odbioru rezerwacji).
+          // Bez tej wartości logowanie takiego konta kończy się błędem walidacji.
+          const validUserTypes = ['REGULAR', 'COMPANY', 'EMPLOYEE', 'STORE_EMPLOYEE', 'ADMIN'];
           
           if (!result.userType || !validUserTypes.includes(result.userType)) {
             console.error(`Błąd walidacji userType: otrzymano nieprawidłową wartość '${result.userType}'. Dozwolone wartości: ${validUserTypes.join(', ')}`);

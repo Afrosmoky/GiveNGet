@@ -2,11 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FaBell, FaSearch } from 'react-icons/fa';
+import { FaBell, FaSearch, FaTicketAlt, FaQrcode, FaChartBar, FaFileImport, FaUsers } from 'react-icons/fa';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { environment } from '../config';
-import { authorizedFetch, isAuthenticated } from '../utils/auth';
+import { authorizedFetch, getUserData, isAuthenticated } from '../utils/auth';
 import { useWebSocketContext } from '../context/WebSocketContext';
 import { Message } from '../hooks/useGlobalWebSocket';
 
@@ -19,6 +19,14 @@ interface UnreadChatNotification {
 export default function MobileHeader() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // Rezerwacje dotyczą tylko konta konsumenckiego (ROLE_USER = UserType.REGULAR)
+  const [isRegularUser, setIsRegularUser] = useState(false);
+  // Panel potwierdzania odbioru — tylko pracownik sklepu
+  const [isStoreEmployee, setIsStoreEmployee] = useState(false);
+  // Raport oszczędności — konto firmowe i administrator platformy
+  const [canSeeReport, setCanSeeReport] = useState(false);
+  // Import ofert z Excela — tylko konto firmowe
+  const [isCompany, setIsCompany] = useState(false);
   const [unreadChats, setUnreadChats] = useState<UnreadChatNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const wsCtx = useWebSocketContext();
@@ -28,6 +36,11 @@ export default function MobileHeader() {
     const checkAuthStatus = () => {
       const authenticated = isAuthenticated();
       setIsLoggedIn(authenticated);
+      const userType = getUserData()?.userType;
+      setIsRegularUser(authenticated && userType === 'REGULAR');
+      setIsStoreEmployee(authenticated && userType === 'STORE_EMPLOYEE');
+      setCanSeeReport(authenticated && (userType === 'COMPANY' || userType === 'ADMIN'));
+      setIsCompany(authenticated && userType === 'COMPANY');
     };
 
     checkAuthStatus();
@@ -133,6 +146,62 @@ export default function MobileHeader() {
             className="h-12 w-auto"
           />
         </Link>
+        <div className="flex items-center gap-2">
+        {canSeeReport && (
+          <button
+            type="button"
+            onClick={() => router.push('/reports/savings')}
+            aria-label="Raport oszczędności"
+            title="Raport oszczędności"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-700 transition-colors hover:bg-gray-600"
+          >
+            <FaChartBar size={16} className="text-white" />
+          </button>
+        )}
+        {isCompany && (
+          <button
+            type="button"
+            onClick={() => router.push('/offers/import')}
+            aria-label="Import ofert z Excela"
+            title="Import ofert z Excela"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-700 transition-colors hover:bg-gray-600"
+          >
+            <FaFileImport size={16} className="text-white" />
+          </button>
+        )}
+        {isCompany && (
+          <button
+            type="button"
+            onClick={() => router.push('/store/employees')}
+            aria-label="Pracownicy sklepu"
+            title="Pracownicy sklepu"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-700 transition-colors hover:bg-gray-600"
+          >
+            <FaUsers size={16} className="text-white" />
+          </button>
+        )}
+        {isStoreEmployee && (
+          <button
+            type="button"
+            onClick={() => router.push('/store/pickup')}
+            aria-label="Potwierdzanie odbioru"
+            title="Potwierdzanie odbioru"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-700 transition-colors hover:bg-gray-600"
+          >
+            <FaQrcode size={16} className="text-white" />
+          </button>
+        )}
+        {isRegularUser && (
+          <button
+            type="button"
+            onClick={() => router.push('/reservations')}
+            aria-label="Moje rezerwacje"
+            title="Moje rezerwacje"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-700 transition-colors hover:bg-gray-600"
+          >
+            <FaTicketAlt size={16} className="text-white" />
+          </button>
+        )}
         {isLoggedIn && (
           <div style={{ position: 'relative' }} className="mobile-notifications-container">
             <button
@@ -231,6 +300,7 @@ export default function MobileHeader() {
             )}
           </div>
         )}
+        </div>
       </div>
       
       {/* Search bar */}

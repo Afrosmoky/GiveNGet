@@ -28,4 +28,8 @@ export interface OfferDetails {
   isFavorite?: boolean;
   categoryId?: number;
   subcategoryId?: number;
+  /** Liczba sztuk wystawiona przez sprzedawcę. */
+  quantity?: number;
+  /** quantity minus sztuki zajęte aktywnymi rezerwacjami i odbiorami. */
+  availableQuantity?: number;
 } 

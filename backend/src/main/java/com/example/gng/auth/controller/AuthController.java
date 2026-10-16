@@ -4,6 +4,11 @@ import com.example.gng.auth.dto.LoginRequest;
 import com.example.gng.auth.dto.LoginResponse;
 import com.example.gng.auth.service.CustomUserDetailsService;
 import com.example.gng.auth.service.JwtService;
+import com.example.gng.common.exception.TooManyRequestsException;
+import com.example.gng.common.ratelimit.ClientIpResolver;
+import com.example.gng.common.ratelimit.RateLimitProperties;
+import com.example.gng.common.ratelimit.RateLimitResult;
+import com.example.gng.common.ratelimit.TokenBucketRateLimiter;
 import com.example.gng.ban.entity.UserBanEntity;
 import com.example.gng.ban.enums.BanReason;
 import com.example.gng.ban.service.UserBanService;
@@ -13,6 +18,7 @@ import com.example.gng.register.model.Language;
 import com.example.gng.register.model.UserModel;
 import com.example.gng.register.repository.UserRepository;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -36,23 +42,54 @@ public class AuthController {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final UserBanService userBanService;
+    private final TokenBucketRateLimiter rateLimiter;
+    private final RateLimitProperties rateLimitProperties;
+    private final ClientIpResolver clientIpResolver;
 
     public AuthController(AuthenticationManager authenticationManager,
                          CustomUserDetailsService userDetailsService,
                          JwtService jwtService,
                          UserRepository userRepository,
                          FileStorageService fileStorageService,
-                         UserBanService userBanService) {
+                         UserBanService userBanService,
+                         TokenBucketRateLimiter rateLimiter,
+                         RateLimitProperties rateLimitProperties,
+                         ClientIpResolver clientIpResolver) {
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
         this.jwtService = jwtService;
         this.userRepository = userRepository;
         this.fileStorageService = fileStorageService;
         this.userBanService = userBanService;
+        this.rateLimiter = rateLimiter;
+        this.rateLimitProperties = rateLimitProperties;
+        this.clientIpResolver = clientIpResolver;
     }
 
+    /**
+     * Logowanie. Limit tempa per adres IP chroni przed brute-force na hasła.
+     *
+     * <p>Limit jest sprawdzany PRZED próbą uwierzytelnienia, więc nieudane próby też go
+     * zużywają — o to właśnie chodzi. Przekroczenie kończy się 429 w formacie
+     * {code, message, details} z nagłówkiem Retry-After; kształt odpowiedzi udanego
+     * logowania i pozostałych przypadków pozostaje bez zmian.
+     *
+     * <p>Klucz to adres klienta z {@code ClientIpResolver} (X-Forwarded-For za proxy),
+     * nie {@code remoteAddr} — inaczej jedna seria nieudanych prób zablokowałaby
+     * logowanie wszystkim za tym samym nginxem.
+     */
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest,
+                                   HttpServletRequest httpRequest) {
+        String clientIp = clientIpResolver.resolve(httpRequest);
+        RateLimitResult rateLimit = rateLimiter.tryConsume(
+                "login:" + clientIp, rateLimitProperties.getLogin());
+        if (!rateLimit.allowed()) {
+            log.warn("Przekroczono limit prób logowania z adresu {} (ponów za {} s)",
+                    clientIp, rateLimit.retryAfterSeconds());
+            throw TooManyRequestsException.rateLimit(rateLimit.retryAfterSeconds());
+        }
+
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(

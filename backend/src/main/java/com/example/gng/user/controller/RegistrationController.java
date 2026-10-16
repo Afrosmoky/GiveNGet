@@ -1,5 +1,6 @@
 package com.example.gng.user.controller;
 
+import com.example.gng.common.exception.ApiException;
 import com.example.gng.exceptions.InvalidRequestException;
 import com.example.gng.register.repository.UserRepository;
 import com.example.gng.user.register.dto.RegisterUserDTO;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -78,12 +81,16 @@ public class RegistrationController {
             log.debug("Zdjęcie profilowe obecne: {}", profilePhoto != null && !profilePhoto.isEmpty());
             log.debug("Content type żądania: {}", user.toString());
 
-            userService.registerUser(user, profilePhoto);
+            boolean activationEmailSent = userService.registerUser(user, profilePhoto);
 
             log.info("Zarejestrowano użytkownika: {}", user.getEmail());
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .build();
+                    .body(Map.of("activationEmailSent", activationEmailSent));
 
+        } catch (ApiException e) {
+            // Błędy domenowe z kodem (np. CONSENT_REQUIRED) idą do GlobalExceptionHandler
+            // w formacie 6.3 — catch poniżej zamieniłby je na goły tekst bez kodu
+            throw e;
         } catch (Exception e) {
             log.error("Błąd podczas rejestracji użytkownika: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -102,13 +109,17 @@ public class RegistrationController {
 
         try {
             // Rejestracja firmy
-            userService.registerCompany(company, companyLogo);
+            boolean activationEmailSent = userService.registerCompany(company, companyLogo);
 
 
             log.info("Zarejestrowano firmę: {}", company.getEmail());
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .build();
+                    .body(Map.of("activationEmailSent", activationEmailSent));
 
+        } catch (ApiException e) {
+            // Błędy domenowe z kodem (np. CONSENT_REQUIRED) idą do GlobalExceptionHandler
+            // w formacie 6.3 — catch poniżej zamieniłby je na goły tekst bez kodu
+            throw e;
         } catch (Exception e) {
             log.error("Błąd podczas rejestracji firmy: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

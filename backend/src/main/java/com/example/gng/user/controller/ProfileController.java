@@ -64,7 +64,7 @@ public class ProfileController {
             UserData user = userService.getUserData(userId);
             return ResponseEntity.ok(UserOffersDto.builder()
                     .userData(user)
-                    .offers(withOffers ? offerService.getUserOffers(userId) : List.of())
+                    .offers(withOffers ? offerService.getActiveUserOffers(userId) : List.of())
                     .rate(withRate ? ratesService.getSimplyRate(userId) : null)
                     .build());
         } catch (Exception e) {

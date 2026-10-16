@@ -1,6 +1,7 @@
 package com.example.gng.chat.service;
 
 import com.example.gng.chat.dto.*;
+import com.example.gng.common.exception.ForbiddenOperationException;
 import com.example.gng.chat.entity.ChatEntity;
 import com.example.gng.chat.entity.ChatParticipantEntity;
 import com.example.gng.chat.entity.MessageEntity;
@@ -63,16 +64,50 @@ public class ChatService {
     }
 
     /**
-     * Pobierz wiadomości czatu z paginacją
+     * Pobierz wiadomości czatu z paginacją — tylko dla uczestnika rozmowy.
+     *
+     * <p>Wcześniej ta metoda przyjmowała wyłącznie {@code chatId} i zwracała wiadomości bez
+     * jakiejkolwiek weryfikacji, kto pyta. W połączeniu z regułą {@code permitAll} na
+     * {@code /api/chats/**} oznaczało to, że dowolna osoba — także niezalogowana — mogła
+     * przeczytać każdą rozmowę na platformie, iterując po sekwencyjnych identyfikatorach
+     * ({@code chat.id} to BIGINT AUTO_INCREMENT).
+     *
+     * <p>Sprawdzenie jest tutaj, a nie w kontrolerze, żeby żadna przyszła ścieżka wywołania
+     * nie mogła go pominąć. Wyjątek: {@link #getConversationSnippet} celowo go nie ma —
+     * patrz komentarz przy tamtej metodzie.
      */
-    public Page<MessageDto> getChatMessages(Long chatId, int page, int size) {
+    public Page<MessageDto> getChatMessages(Long chatId, Long requestingUserId, int page, int size) {
+        requireParticipant(chatId, requestingUserId);
+
         Pageable pageable = PageRequest.of(page, size);
         Page<MessageEntity> messagePage = messageRepository.findByChatIdOrderByTimestampDesc(chatId, pageable);
         return messagePage.map(this::convertMessageToDto);
     }
 
     /**
-     * Pobierz fragment rozmowy: wiadomość o podanym ID oraz 5 wcześniejszych i 5 późniejszych (jeśli istnieją)
+     * Przerywa operację, jeśli użytkownik nie jest aktywnym uczestnikiem czatu.
+     *
+     * Ten sam warunek co w ścieżce WebSocket ({@code ChatWebSocketService}), więc REST
+     * i WS mają identyczną regułę dostępu.
+     */
+    private void requireParticipant(Long chatId, Long userId) {
+        if (chatId == null || userId == null
+                || !chatParticipantRepository.existsByChatIdAndUserIdAndLeftAtIsNull(chatId, userId)) {
+            throw new ForbiddenOperationException(
+                    "Brak dostępu do tej rozmowy.",
+                    java.util.Map.of("chatId", String.valueOf(chatId)));
+        }
+    }
+
+    /**
+     * Pobierz fragment rozmowy: wiadomość o podanym ID oraz 5 wcześniejszych i 5 późniejszych.
+     *
+     * <p><b>Świadomie BEZ sprawdzenia uczestnictwa.</b> Metoda jest wołana wyłącznie
+     * z {@code ModeratorController} pod {@code /api/mod/**}, gdzie dostęp mają tylko
+     * {@code ADMIN} i {@code EMPLOYEE}, a czytanie cudzej rozmowy jest funkcją moderacji
+     * skarg. Dodanie tu {@code requireParticipant} zepsułoby panel moderacji.
+     * Autoryzacja tej ścieżki leży w regule {@code /api/mod/**} w {@code SecurityConfig} —
+     * nie wystawiać jej pod żadnym innym prefiksem.
      */
     public java.util.List<MessageDto> getConversationSnippet(Long chatId, Long messageId) {
         MessageEntity center = messageRepository.findById(messageId)

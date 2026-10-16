@@ -4,6 +4,7 @@ import com.example.gng.auth.service.SessionService;
 import com.example.gng.chat.dto.*;
 import com.example.gng.chat.service.ChatService;
 import com.example.gng.chat.service.FcmTokenService;
+import com.example.gng.common.exception.ApiException;
 import com.example.gng.register.repository.UserRepository;
 import com.example.gng.register.model.UserModel;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,8 +55,16 @@ public class ChatRestController {
                                                            @RequestParam(defaultValue = "0") int page,
                                                            @RequestParam(defaultValue = "20") int size) {
         try {
-            Page<MessageDto> messages = chatService.getChatMessages(chatId, page, size);
+            String currentUserEmail = SessionService.getCurrentUserEmail();
+            UserModel currentUser = userRepository.findByEmail(currentUserEmail)
+                    .orElseThrow(() -> new RuntimeException("Zalogowany użytkownik nie znaleziony"));
+
+            Page<MessageDto> messages = chatService.getChatMessages(chatId, currentUser.getId(), page, size);
             return ResponseEntity.ok(messages);
+        } catch (ApiException e) {
+            // Odmowa dostępu ma wyjść jako 403 w formacie {code, message, details},
+            // a nie zniknąć w catch-allu poniżej jako puste 400
+            throw e;
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }

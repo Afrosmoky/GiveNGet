@@ -1,7 +1,10 @@
-# Pliki z secretami — NIE commitować
+# Pliki z secretami — NIE commitować.
+# .env.example JEST commitowany (tylko placeholdery) i stanowi kanoniczną
+# listę wymaganych zmiennych — dlatego wzorce poniżej są dokładne, nie .env*
 .env
 .env.local
 .env.demo
+.env.production
 
 # IDE
 .idea/
@@ -37,3 +40,11 @@ CONTEXT.md
 Rozmowa_GiveNGet_ściąga.md
 Audyt_Techniczny_GiveNGet.docx
 GiveNGet_wycena.docx
+
+# Dokumenty biznesowe / z danymi osobowymi — NIE commitować do repo kodu
+Umowa_Biovlo*.docx
+Umowa_Biovlo.docx
+Notatki_rozmowa_Lukasz_Biovlo.docx
+Propozycje_zmian_umowa_Biovlo.docx
+Biovlo_case_portfolio.md
+Biovlo_zakres_pilotazu.docx

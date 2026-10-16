@@ -24,6 +24,10 @@ interface OfferFormData {
   coordinates?: string;
   description: string;
   offerType: TransactionType;
+  /** Cena za sztukę jako string — input pozostaje kontrolowany podczas wpisywania. */
+  price?: string;
+  /** Waluta ceny (ISO 4217); wysyłana tylko dla ofert sprzedażowych. */
+  currency?: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
   expiryDate: Date | null;
@@ -103,6 +107,7 @@ export function OfferForm({
     description: "",
     images: "",
     imageSize: "", // Błąd dla rozmiaru zdjęć
+    price: "",
   });
 
   const [touched, setTouched] = useState({
@@ -127,6 +132,8 @@ export function OfferForm({
     location: "",
     description: "",
     offerType: "free",
+    price: "",
+    currency: "PLN",
     pickupTimeFrom: "00:00",
     pickupTimeTo: "23:55",
     expiryDate: new Date(),
@@ -469,8 +476,21 @@ export function OfferForm({
         }
       }
 
+      // Cena istnieje wyłącznie dla sprzedaży. Czyścimy ją także wtedy, gdy typ zmienił
+      // się pośrednio — po zmianie kategorii, która nie dopuszcza sprzedaży. Inaczej
+      // zostałaby w stanie i poszłaby na backend, który odrzuci ją jako
+      // PRICE_NOT_ALLOWED_FOR_FREE.
+      if (newData.offerType !== 'sale') {
+        newData.price = "";
+      }
+
       return newData;
     });
+
+    // Zmiana typu unieważnia błąd ceny
+    if (field === 'offerType' || field === 'categoryId' || field === 'subcategoryId') {
+      setErrors((prev) => ({ ...prev, price: "" }));
+    }
 
     // Walidacja w czasie rzeczywistym dla pól tekstowych
     if (typeof value === "string" && touched[field as keyof typeof touched]) {
@@ -498,6 +518,32 @@ export function OfferForm({
     }
   };
 
+  /**
+   * Walidacja ceny po stronie klienta — te same reguły, co w backendzie
+   * (OfferService.resolvePricingForCreate). Backend i tak je egzekwuje; tutaj chodzi
+   * o to, żeby użytkownik nie wysyłał formularza po to, by dostać odmowę.
+   */
+  const validatePrice = (): string => {
+    if (formData.offerType !== 'sale') {
+      return "";
+    }
+    const raw = (formData.price || "").trim().replace(",", ".");
+    if (!raw) {
+      return "Podaj cenę";
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      return "Cena musi być większa od zera";
+    }
+    if (!/^\d+([.]\d{1,2})?$/.test(raw)) {
+      return "Cena może mieć najwyżej 2 miejsca po przecinku";
+    }
+    if (value > 99999999.99) {
+      return "Cena jest zbyt wysoka";
+    }
+    return "";
+  };
+
   const handleSubmit = async (isPreview: boolean = false) => {
     setSubmitMessage(null);
 
@@ -508,6 +554,7 @@ export function OfferForm({
       description: validateField("description", formData.description),
       images: validateImages(),
       imageSize: errors.imageSize, // Zachowaj błąd rozmiaru jeśli istnieje
+      price: validatePrice(),
     };
 
     // Oznacz wszystkie pola jako touched
@@ -617,6 +664,10 @@ export function OfferForm({
       name: formData.name,
       description: formData.description,
       transactionType: formData.offerType,
+      price: formData.offerType === 'sale' && formData.price
+        ? Number(formData.price.replace(",", "."))
+        : undefined,
+      currency: formData.offerType === 'sale' ? formData.currency : undefined,
       expiryDate: formData.expiryDate ? formData.expiryDate.toISOString().split('T')[0] : undefined,
       pickupDateFrom: formData.pickupTimeFrom,
       pickupDateTo: formData.pickupTimeTo,
@@ -1213,6 +1264,70 @@ export function OfferForm({
               </div>
             </div>
           </div>
+
+          {/* Cena — tylko dla ofert sprzedażowych. Dla „za darmo" i „wymiany" backend
+              odrzuca cenę (PRICE_NOT_ALLOWED_FOR_FREE), więc blok nie tylko się ukrywa,
+              ale wartość jest też czyszczona w handleInputChange. */}
+          {formData.offerType === 'sale' && (
+            <div className="mb-6 sm:mb-8 rounded-lg border-2 border-gray-200 p-4 sm:p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4 sm:gap-6">
+                <div>
+                  <label
+                    htmlFor="offer-price"
+                    className="block text-base sm:text-lg font-bold text-gray-800 mb-2 sm:mb-3"
+                  >
+                    Cena za sztukę *
+                  </label>
+                  <input
+                    id="offer-price"
+                    type="text"
+                    inputMode="decimal"
+                    value={formData.price || ""}
+                    onChange={(e) => handleInputChange("price", e.target.value)}
+                    onBlur={() =>
+                      setErrors((prev) => ({ ...prev, price: validatePrice() }))
+                    }
+                    placeholder="np. 4.99"
+                    aria-invalid={errors.price ? true : undefined}
+                    aria-describedby={errors.price ? "offer-price-error" : undefined}
+                    className={`w-full rounded-lg border-2 p-3 sm:p-4 text-base sm:text-lg transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200 ${
+                      errors.price
+                        ? "border-red-400 focus:border-red-500"
+                        : "border-gray-200 focus:border-yellow-400"
+                    }`}
+                  />
+                  {errors.price ? (
+                    <p id="offer-price-error" className="mt-1 text-xs sm:text-sm text-red-500">
+                      {errors.price}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs sm:text-sm text-gray-500">
+                      Cena za jedną sztukę, maksymalnie 2 miejsca po przecinku.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="offer-currency"
+                    className="block text-base sm:text-lg font-bold text-gray-800 mb-2 sm:mb-3"
+                  >
+                    Waluta
+                  </label>
+                  <select
+                    id="offer-currency"
+                    value={formData.currency || "PLN"}
+                    onChange={(e) => handleInputChange("currency", e.target.value)}
+                    className="w-full cursor-pointer rounded-lg border-2 border-gray-200 bg-white p-3 sm:p-4 text-base sm:text-lg transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
+                  >
+                    <option value="PLN">PLN</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Godziny odbioru */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">

@@ -9,12 +9,17 @@ import com.example.gng.offer.repository.OfferRepository;
 import com.example.gng.image.model.ImageEntity;
 import com.example.gng.register.model.UserModel;
 import com.example.gng.register.repository.UserRepository;
+import com.example.gng.reservation.repository.ReservationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.stream.Collectors;
@@ -26,14 +31,17 @@ public class FavoriteOfferService {
     private final FavoriteOfferRepository favoriteOfferRepository;
     private final OfferRepository offerRepository;
     private final UserRepository userRepository;
+    private final ReservationRepository reservationRepository;
 
     @Autowired
     public FavoriteOfferService(FavoriteOfferRepository favoriteOfferRepository,
                                OfferRepository offerRepository,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               ReservationRepository reservationRepository) {
         this.favoriteOfferRepository = favoriteOfferRepository;
         this.offerRepository = offerRepository;
         this.userRepository = userRepository;
+        this.reservationRepository = reservationRepository;
     }
 
     /**
@@ -104,8 +112,20 @@ public class FavoriteOfferService {
 
         List<FavoriteOfferEntity> favoriteOffers = favoriteOfferRepository.findByUser(user);
 
+        // Policz sztuki zajęte rezerwacjami jednym zapytaniem na całą listę
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        List<String> offerIds = favoriteOffers.stream()
+                .map(favoriteOffer -> favoriteOffer.getOffer().getId())
+                .toList();
+        Map<String, Integer> reservedByOffer = new HashMap<>();
+        if (!offerIds.isEmpty()) {
+            for (Object[] row : reservationRepository.sumOccupiedQuantityByOfferIds(offerIds, now)) {
+                reservedByOffer.put((String) row[0], ((Number) row[1]).intValue());
+            }
+        }
+
         return favoriteOffers.stream()
-                .map(this::convertToOfferPreview)
+                .map(favoriteOffer -> convertToOfferPreview(favoriteOffer, reservedByOffer))
                 .collect(Collectors.toList());
     }
 
@@ -152,7 +172,8 @@ public class FavoriteOfferService {
     /**
      * Konwertuje encję na OfferPreview
      */
-    private OfferPreview convertToOfferPreview(FavoriteOfferEntity favoriteOffer) {
+    private OfferPreview convertToOfferPreview(FavoriteOfferEntity favoriteOffer,
+                                               Map<String, Integer> reservedByOffer) {
         OfferPreview preview = new OfferPreview();
         OfferEntity offer = favoriteOffer.getOffer();
 
@@ -164,6 +185,15 @@ public class FavoriteOfferService {
         preview.setRecommended(offer.getRecommended());
         preview.setIsFavorite(true);
         preview.setStatus(offer.getStatus());
+
+        // Cena i waluta (null dla ofert darmowych i wymian)
+        preview.setPrice(offer.getPrice());
+        preview.setCurrency(offer.getCurrency());
+
+        // Liczba sztuk i dostępność (quantity minus sztuki zajęte rezerwacjami)
+        int total = offer.getQuantity() != null ? offer.getQuantity() : 0;
+        preview.setQuantity(offer.getQuantity());
+        preview.setAvailableQuantity(Math.max(0, total - reservedByOffer.getOrDefault(offer.getId(), 0)));
 
         // Ustaw lokalizację na podstawie współrzędnych
         if (offer.getLatitude() != null && offer.getLongitude() != null) {

@@ -4,6 +4,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,8 @@ public class EmailSenderService {
 
             mailSender.send(message);
         } catch (MessagingException e) {
-            throw new RuntimeException("Błąd podczas wysyłania e-maila: " + e.getMessage(), e);
+            // MailException, jak błędy samej wysyłki — wywołujący łapią jeden typ
+            throw new MailPreparationException("Błąd podczas przygotowania e-maila: " + e.getMessage(), e);
         }
     }
 }

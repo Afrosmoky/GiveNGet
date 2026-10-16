@@ -131,6 +131,13 @@
 			<version>9.2.0</version>
 		</dependency>
 
+		<!-- Apache POI — import ofert z plików .xlsx (docs/08, pozycja 1) -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>5.3.0</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getImageUrl } from '../utils/imageUtils';
 import { useFavorites } from '../hooks/useFavorites';
@@ -16,6 +17,8 @@ interface ExtendedOfferTileProps extends OfferTileProps {
   isEditing?: boolean;
   showStatus?: boolean;
   onFavoriteToggle?: (offerId: string, currentIsFavorite: boolean) => Promise<void>;
+  /** Ukrywa link „Sklep: …" — np. na stronie samego sklepu, gdzie byłby pętlą. */
+  hideStoreLink?: boolean;
 }
 
 export default function OfferTile({
@@ -34,8 +37,13 @@ export default function OfferTile({
   showStatus = false,
   sellerRank,
   sellerTrustPoints,
+  sellerId,
+  sellerType,
+  storeName,
+  hideStoreLink = false,
   onFavoriteToggle
 }: ExtendedOfferTileProps) {
+  const router = useRouter();
   const { toggleFavorite, loading } = useFavorites();
   const { addError } = useErrorContext();
   const [localIsFavorite, setLocalIsFavorite] = useState(isFavorite);
@@ -97,6 +105,15 @@ export default function OfferTile({
   };
 
   const href = isEditing ? `/offers/edit/${id}` : `/offers/${id}/${name}`;
+  const showStoreLink = !hideStoreLink && !isEditing && sellerType === 'COMPANY' && !!sellerId && !!storeName;
+
+  // Kafelek jest jednym <Link> do oferty, więc link do sklepu nie może być zagnieżdżonym <a> —
+  // przycisk przechwytuje kliknięcie tak samo jak serduszko ulubionych
+  const handleStoreClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(`/stores/${sellerId}`);
+  };
   
   return (
     <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }} onClick={handleOfferClick}>
@@ -184,6 +201,30 @@ export default function OfferTile({
         >
           {location}
         </div>
+        {showStoreLink && (
+          <button
+            type="button"
+            onClick={handleStoreClick}
+            title={`Zobacz sklep: ${storeName}`}
+            style={{
+              maxWidth: '100%',
+              marginTop: '2px',
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: '#b7791f',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              textDecoration: 'underline'
+            }}
+          >
+            Sklep: {storeName}
+          </button>
+        )}
         <div style={{
           width: '100%',
           textAlign: 'center',

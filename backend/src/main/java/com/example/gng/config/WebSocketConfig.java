@@ -2,7 +2,6 @@ package com.example.gng.config;
 
 import com.example.gng.chat.handler.WebSocketChatHandler;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -21,8 +20,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer, WebSoc
     @Autowired
     private WebSocketChatHandler webSocketChatHandler;
 
-    @Value("${cors.allowed-origin:http://localhost:3000}")
-    private String allowedOrigin;
+    /**
+     * Ta sama lista originów co dla HTTP. WebSocket potrzebuje własnej konfiguracji, bo
+     * /ws/** jest wyłączone z łańcucha Security przez webSecurityCustomizer.ignoring(),
+     * więc filtr CORS-u z SecurityConfig go nie obejmuje — ale źródło musi być jedno.
+     */
+    @Autowired
+    private CorsProperties corsProperties;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -40,8 +44,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer, WebSoc
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Zarejestruj endpoint WebSocket z obsługą tokenów JWT w parametrze URL
         registry.addEndpoint("/ws")
-                .setAllowedOrigins(allowedOrigin)
-                .setAllowedOriginPatterns(allowedOrigin); // Dodaj obsługę SockJS dla fallback
+                .setAllowedOrigins(corsProperties.resolvedOrigins().toArray(String[]::new));
     }
 
     @Override
@@ -55,7 +58,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer, WebSoc
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         // Zarejestruj handler dla WebSocket z autoryzacją przez token JWT
         registry.addHandler(webSocketChatHandler, "/ws")
-                .setAllowedOrigins(allowedOrigin)
-                .setAllowedOriginPatterns(allowedOrigin);
+                .setAllowedOrigins(corsProperties.resolvedOrigins().toArray(String[]::new));
     }
 }

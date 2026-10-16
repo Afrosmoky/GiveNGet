@@ -196,4 +196,28 @@
         <sqlFile path="db/46-update-offer-modified-by-staff-template.sql"/>
     </changeSet>
 
+    <changeSet id="47-add-offer-quantity" author="piotr.szulc">
+        <sqlFile path="db/47-add-offer-quantity.sql"/>
+    </changeSet>
+
+    <changeSet id="48-create-reservation" author="piotr.szulc">
+        <sqlFile path="db/48-create-reservation.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="49-create-store-employee" author="piotr.szulc">
+        <sqlFile path="db/49-create-store-employee.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="50-add-user-consents" author="piotr.szulc">
+        <sqlFile path="db/50-add-user-consents.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="51-backfill-user-create-date" author="piotr.szulc">
+        <sqlFile path="db/51-backfill-user-create-date.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="52-store-employee-active" author="piotr.szulc">
+        <sqlFile path="db/52-store-employee-active.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
 </databaseChangeLog>

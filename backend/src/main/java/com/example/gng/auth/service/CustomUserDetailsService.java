@@ -4,6 +4,7 @@ import com.example.gng.ban.service.UserBanService;
 import com.example.gng.register.model.UserModel;
 import com.example.gng.register.model.UserType;
 import com.example.gng.register.repository.UserRepository;
+import com.example.gng.store.entity.StoreEmployeeModel;
 import com.example.gng.user.service.AccountDeletionService;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -45,7 +46,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         return new User(
                 user.getEmail(),
                 user.getPassword(),
-                user.getVerified() != null && user.getVerified(), // enabled tylko jeśli użytkownik jest zweryfikowany
+                isEnabled(user),
                 true, // account non expired
                 true, // credentials non expired
                 !isBanned, // account non locked - false jeśli użytkownik ma ban
@@ -53,7 +54,20 @@ public class CustomUserDetailsService implements UserDetailsService {
         );
     }
 
-    private Collection<? extends GrantedAuthority> getAuthorities(UserModel user) {
+    /**
+     * Konto jest włączone tylko, gdy jest zweryfikowane. Pracownik sklepu musi być
+     * dodatkowo aktywny — firma może mu odebrać dostęp bez ruszania {@code verified}
+     * (patrz migracja 52).
+     */
+    static boolean isEnabled(UserModel user) {
+        boolean verified = user.getVerified() != null && user.getVerified();
+        if (user instanceof StoreEmployeeModel employee) {
+            return verified && employee.isActive();
+        }
+        return verified;
+    }
+
+        private Collection<? extends GrantedAuthority> getAuthorities(UserModel user) {
         String role;
         if (user.getType() == UserType.ADMIN) {
             role = "ROLE_ADMIN";
@@ -61,6 +75,9 @@ public class CustomUserDetailsService implements UserDetailsService {
             role = "ROLE_EMPLOYEE";
         } else if (user.getType() == UserType.COMPANY) {
             role = "ROLE_COMPANY";
+        } else if (user.getType() == UserType.STORE_EMPLOYEE) {
+            // Pracownik sklepu — potwierdza odbiory swojego sklepu, bez uprawnień moderacyjnych
+            role = "ROLE_STORE_EMPLOYEE";
         } else {
             role = "ROLE_USER";
         }
