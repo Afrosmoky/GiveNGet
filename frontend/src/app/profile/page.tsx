@@ -14,7 +14,8 @@ import { MyOffersDetailView } from '../../components/MyOffersDetailView';
 import { LuBell, LuChevronRight, LuHeart, LuArrowLeft, LuLogOut, LuReceipt, LuTag, LuTrash2, LuUser } from 'react-icons/lu';
 import UserRankBadge from '../../components/UserRankBadge';
 import FreeOffersCounter from '../../components/FreeOffersCounter';
-import { Alert, Avatar, Button, Card, Dialog, IconButton, PageHeader, cn, pageContainer } from '../../components/ui';
+import { Alert, Avatar, Button, Card, Dialog, IconButton, PageHeader, cn } from '../../components/ui';
+import { usePageFrame } from '../../components/shell/usePageFrame';
 
 type View = 'main' | 'profile' | 'orders' | 'notifications' | 'favorites' | 'myOffers';
 
@@ -28,8 +29,9 @@ const SUBVIEW_TITLES: Record<Exclude<View, 'main'>, string> = {
 
 /** Podstrona konta: przycisk powrotu + tytuł, treść w tej samej kolumnie co reszta konta. */
 function SubPage({ title, description, onBack, children }: { title: string; description?: string; onBack: () => void; children: React.ReactNode }) {
+  const { frame } = usePageFrame();
   return (
-    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
+    <div className={frame}>
       <div className="mb-5 flex items-start gap-2 sm:mb-6">
         <IconButton label="Wróć do konta" icon={<LuArrowLeft size={20} />} onClick={onBack} className="-ml-2 shrink-0" />
         <div className="min-w-0 pt-0.5">
@@ -92,6 +94,8 @@ function ProfilePageContent() {
   });
   
   const [currentView, setCurrentView] = useState<View>('main');
+  // Konto firmowe widzi /profile w konsoli (pozycja „Oferty”) — rama dopasowana do powłoki
+  const { frame: pageFrame } = usePageFrame();
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -366,7 +370,7 @@ function ProfilePageContent() {
 
   // Widok główny konta
   return (
-    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
+    <div className={pageFrame}>
       <PageHeader title="Konto" description="Twoje dane, oferty i ustawienia." />
 
       <div className="grid gap-4 md:grid-cols-[300px_1fr] md:items-start">

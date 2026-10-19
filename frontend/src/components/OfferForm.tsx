@@ -13,7 +13,8 @@ import { getImageUrl } from "../utils/imageUtils";
 import { TimePicker } from "./TimePicker";
 import OfferDetailsView from "./OfferDetailsView";
 import { categoryIcon } from "./offer/categoryIcons";
-import { Button, Card, CardHeader, Chip, IconButton, Input, PageHeader, Select, Spinner, Textarea, cn, consolePage } from "./ui";
+import { Button, Card, CardHeader, Chip, IconButton, Input, PageHeader, Select, Spinner, Textarea, cn } from "./ui";
+import { usePageFrame } from "./shell/usePageFrame";
 import { TransactionType, Category, isTransactionAllowed, getAllowedTransactionTypes, getTransactionTypeMessage, getProductRestrictions } from "../types/offer";
 
 interface OfferFormData {
@@ -69,6 +70,7 @@ export function OfferForm({
   setSubmitMessage: externalSetSubmitMessage,
 }: OfferFormProps) {
   const isMapUpdate = useRef(false);
+  const { frame: pageFrame } = usePageFrame();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [userData, setUserData] = useState<{ id: number; userType: string; [key: string]: unknown } | null>(null);
@@ -732,7 +734,7 @@ export function OfferForm({
   if (currentStep === "categories") {
     const needsSubcategory = Boolean(selectedCategoryData?.subcategories?.length);
     return (
-      <div className={cn(consolePage, '[&>*]:max-w-4xl')}>
+      <div className={cn(pageFrame, '[&>*]:max-w-4xl')}>
         <PageHeader title={title} description="Krok 1 z 2 — wybierz kategorię produktu." />
 
         <Card padding="lg">
@@ -756,7 +758,7 @@ export function OfferForm({
                   )}
                 >
                   <Icon size={20} aria-hidden className={cn("shrink-0", selected ? "text-brand" : "text-ink-subtle")} />
-                  <span className="leading-tight">{category.name}</span>
+                  <span className="min-w-0 leading-tight [overflow-wrap:anywhere]">{category.name}</span>
                 </button>
               );
             })}
@@ -805,7 +807,7 @@ export function OfferForm({
 
   // Krok 2: Szczegóły oferty
   return (
-    <div className={cn(consolePage, '[&>*]:max-w-4xl')}>
+    <div className={cn(pageFrame, '[&>*]:max-w-4xl')}>
       <PageHeader
         title={title}
         description="Krok 2 z 2 — opisz ofertę i ustal warunki odbioru."

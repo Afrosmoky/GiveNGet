@@ -11,6 +11,7 @@ import { TransactionType, OfferStatus, STATUS_LABELS } from '../../../../types/o
 import { describeApiError, parseApiError } from '../../../../utils/apiErrors';
 import { LuCircleAlert, LuCircleCheck, LuTriangleAlert } from 'react-icons/lu';
 import { Badge, Button, Card, Spinner, cn } from '../../../../components/ui';
+import { usePageFrame } from '../../../../components/shell/usePageFrame';
 
 interface OfferFormData {
   categoryId: number;
@@ -71,6 +72,7 @@ function EditOfferPageContent() {
   const router = useRouter();
   const { offerId } = params as { offerId: string };
   
+  const { column: pageColumn } = usePageFrame();
   const [offer, setOffer] = useState<OfferDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -303,7 +305,7 @@ function EditOfferPageContent() {
 
   return (
     <div>
-      <div className="mx-auto w-full max-w-6xl space-y-4 px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8 [&>*]:max-w-4xl">
+      <div className={cn(pageColumn, 'space-y-4 [&>*]:max-w-4xl')}>
         {/* Status oferty i jego zmiana */}
         {offer.status && offer.status !== 'PENDING_VERIFICATION' && (
           <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -31,7 +31,7 @@ import UserRankBadge from "./UserRankBadge";
 import ReserveOfferPanel from "./ReserveOfferPanel";
 import { canReserveOffer } from "../types/reservation";
 import { categoryIcon } from "./offer/categoryIcons";
-import { Badge, Button, Card, IconButton, Price, StatusPill, Textarea, cn } from "./ui";
+import { Badge, Button, Card, IconButton, Price, StatusPill, Textarea, cn, pageContainer } from "./ui";
 
 interface OfferDetails {
   id?: string;
@@ -177,7 +177,7 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
 
   return (
     <>
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <div className={cn(pageContainer, 'py-6 sm:py-8')}>
         {/* Mobile: galeria → szczegóły i rezerwacja → opis. Desktop: galeria i opis po lewej, panel po prawej. */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:grid-rows-[auto_1fr] lg:gap-8">
           {/* Galeria zdjęć */}

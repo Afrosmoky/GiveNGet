@@ -198,6 +198,8 @@ function OffersMapContent() {
   );
 
   return (
+    // Celowo pełna szerokość (bez pageContainer): mapa wypełnia cały obszar pod paskiem,
+    // a lista i filtry siedzą w bocznym panelu — wspólna kolumna treści tu by tylko ucinała mapę
     <div className="flex h-[calc(100dvh-12rem)] min-h-[28rem] flex-col md:h-[calc(100dvh-var(--shell-topbar-h))] md:flex-row">
       {/* Panel: filtry + lista (desktop) / filtry nad mapą (mobile) */}
       <aside className="flex shrink-0 flex-col border-line bg-surface md:w-[380px] md:border-r">

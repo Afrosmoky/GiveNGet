@@ -11,7 +11,7 @@ import { FiChevronDown, FiSearch } from 'react-icons/fi';
 import { LuMapPin } from 'react-icons/lu';
 import { useLocationPicker } from '../../../hooks/useLocationPicker';
 import { LocationField } from '../../../components/location/LocationField';
-import { Button, Card, CardHeader, Chip, PageHeader, Spinner } from '../../../components/ui';
+import { Button, Card, CardHeader, Chip, PageHeader, Spinner, cn, pageContainer } from '../../../components/ui';
 import { ApiOffer, TransactionType, Category } from '../../../types/offer';
 import OfferTile from '../../../components/OfferTile';
 import { offersForMap, zoomForRange } from '../../../utils/offerMap';
@@ -301,7 +301,7 @@ function SearchOffersPageContent() {
   const groupLabelClass = 'mb-2 block text-xs font-semibold uppercase tracking-wide text-ink-subtle';
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
       <PageHeader
         title="Wyszukaj oferty"
         description="Ustaw lokalizację i filtry, żeby zobaczyć oferty w Twojej okolicy."

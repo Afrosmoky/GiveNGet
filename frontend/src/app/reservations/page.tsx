@@ -12,7 +12,7 @@ import PickupCodeCard from '../../components/PickupCodeCard';
 import { PushOptIn } from '../../components/PushOptIn';
 import { InstallAppPrompt } from '../../components/InstallAppPrompt';
 import { LuCalendar, LuChevronLeft, LuChevronRight, LuSearch, LuShoppingBag, LuTriangleAlert, LuX } from 'react-icons/lu';
-import { Button, Card, PageHeader, StatusPill, cn, reservationPillStatus } from '../../components/ui';
+import { Button, Card, PageHeader, StatusPill, cn, pageContainer, reservationPillStatus } from '../../components/ui';
 import {
   PageResponse,
   Reservation,
@@ -93,7 +93,8 @@ function ReservationsPageContent() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+    // Rama jak na pozostałych ekranach konsumenta; lista zostaje w węższej kolumnie (czytelność kart)
+    <div className={cn(pageContainer, 'py-6 sm:py-8 [&>*]:max-w-4xl')}>
       <PageHeader
         title="Moje rezerwacje"
         description="Pokaż kod odbioru w sklepie, żeby odebrać zarezerwowany towar."
