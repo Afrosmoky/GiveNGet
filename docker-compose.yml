@@ -62,11 +62,20 @@ services:
       # Credentiale bazy — muszą zgadzać się z sekcją mysql poniżej
       DB_USERNAME: ${DB_USERNAME:-gnguser}
       DB_PASSWORD: ${DB_PASSWORD:-local-not-a-secret}
+      # FCM — klucz serwisowy Firebase montowany niżej jako plik tylko do odczytu.
+      # Brak pliku = backend wstaje z wyłączonymi pushami (WARN w logu).
+      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-service-account.json
+      # Powiadomienia o rezerwacji (minuty) — opcjonalnie, do testów skracamy
+      RESERVATION_EXPIRY_WARNING_BEFORE_MINUTES: ${RESERVATION_EXPIRY_WARNING_BEFORE_MINUTES:-120}
+      RESERVATION_PICKUP_REMINDER_MIN_AGE_MINUTES: ${RESERVATION_PICKUP_REMINDER_MIN_AGE_MINUTES:-30}
     ports:
       - "8080:8080"
     volumes:
       # Persystencja uploadowanych zdjęć między restartami kontenera
       - uploads-data:/app/uploads
+      # Klucz Firebase spoza obrazu (backend/.dockerignore wyklucza go z builda).
+      # Ścieżkę na hoście zmienia FIREBASE_CREDENTIALS_FILE w .env (np. na VPS).
+      - ${FIREBASE_CREDENTIALS_FILE:-./backend/src/main/resources/serviceAccountKey.json}:/run/secrets/firebase-service-account.json:ro
     networks:
       - gng-net
 

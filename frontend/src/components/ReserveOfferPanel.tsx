@@ -6,6 +6,7 @@ import { authorizedFetch } from '../utils/auth';
 import { describeApiError } from '../utils/apiErrors';
 import { Reservation, formatDateTime } from '../types/reservation';
 import PickupCodeCard from './PickupCodeCard';
+import { PushOptIn } from './PushOptIn';
 import { LuCheck, LuMinus, LuPlus } from 'react-icons/lu';
 import { Button, Card, StatusPill } from './ui';
 
@@ -91,6 +92,9 @@ export default function ReserveOfferPanel({
         </div>
 
         <PickupCodeCard pickupCode={reservation.pickupCode} qrPayload={reservation.qrPayload} />
+
+        {/* Najlepszy moment na prośbę o zgodę: użytkownik właśnie ma rezerwację do odebrania */}
+        <PushOptIn className="mt-4" />
 
         {/* Zawsze w kolumnie — panel żyje w wąskiej kolumnie szczegółów także na desktopie */}
         <div className="mt-4 flex flex-col gap-2">

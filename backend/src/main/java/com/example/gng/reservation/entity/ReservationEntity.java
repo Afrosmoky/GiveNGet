@@ -69,6 +69,18 @@ public class ReservationEntity {
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
+    /**
+     * Kiedy wysłano push „rezerwacja wkrótce wygaśnie”; NULL = jeszcze nie. Ustawiany wyłącznie
+     * warunkowym UPDATE-em ({@code ReservationRepository.claimExpiryWarning}) — to on gwarantuje
+     * wysyłkę co najwyżej raz.
+     */
+    @Column(name = "expiry_warning_sent_at")
+    private LocalDateTime expiryWarningSentAt;
+
+    /** Kiedy wysłano push „możesz już odebrać”; NULL = jeszcze nie. Jak {@link #expiryWarningSentAt}. */
+    @Column(name = "pickup_reminder_sent_at")
+    private LocalDateTime pickupReminderSentAt;
+
     @PrePersist
     protected void onCreate() {
         if (id == null) {

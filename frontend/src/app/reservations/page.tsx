@@ -9,6 +9,8 @@ import { describeApiError } from '../../utils/apiErrors';
 import { getImageUrl } from '../../utils/imageUtils';
 import { AuthGuard } from '../../components/AuthGuard';
 import PickupCodeCard from '../../components/PickupCodeCard';
+import { PushOptIn } from '../../components/PushOptIn';
+import { InstallAppPrompt } from '../../components/InstallAppPrompt';
 import { LuCalendar, LuChevronLeft, LuChevronRight, LuSearch, LuShoppingBag, LuTriangleAlert, LuX } from 'react-icons/lu';
 import { Button, Card, PageHeader, StatusPill, cn, reservationPillStatus } from '../../components/ui';
 import {
@@ -29,6 +31,17 @@ function ReservationsPageContent() {
   /** Id rezerwacji w trakcie anulowania — blokuje tylko jej przycisk. */
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  /** Rezerwacja z deep linku powiadomienia push (?reservationId=…) — podświetlona i przewinięta. */
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHighlightedId(new URLSearchParams(window.location.search).get('reservationId'));
+  }, []);
+
+  useEffect(() => {
+    if (!highlightedId || !data) return;
+    document.getElementById(`reservation-${highlightedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightedId, data]);
 
   const loadReservations = useCallback(async (targetPage: number) => {
     setLoading(true);
@@ -86,6 +99,9 @@ function ReservationsPageContent() {
         description="Pokaż kod odbioru w sklepie, żeby odebrać zarezerwowany towar."
       />
 
+      <PushOptIn variant="inline" className="mb-4" />
+      <InstallAppPrompt className="mb-4" />
+
       {cancelError && (
         <div role="alert" className="mb-4 rounded-ui-md border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
           {cancelError}
@@ -115,6 +131,7 @@ function ReservationsPageContent() {
               <ReservationCard
                 key={reservation.id}
                 reservation={reservation}
+                highlighted={highlightedId === reservation.id}
                 cancelling={cancellingId === reservation.id}
                 onCancel={() => handleCancel(reservation.id)}
               />
@@ -136,18 +153,20 @@ function ReservationsPageContent() {
 
 function ReservationCard({
   reservation,
+  highlighted,
   cancelling,
   onCancel,
 }: {
   reservation: Reservation;
+  highlighted: boolean;
   cancelling: boolean;
   onCancel: () => void;
 }) {
   const active = reservation.status === 'RESERVED';
 
   return (
-    <li>
-      <Card padding="lg" className={cn(!active && 'bg-surface/80')}>
+    <li id={`reservation-${reservation.id}`} className="scroll-mt-24">
+      <Card padding="lg" className={cn(!active && 'bg-surface/80', highlighted && 'ring-2 ring-brand ring-offset-2 ring-offset-surface-muted')}>
         <div className="flex gap-4">
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-ui-md border border-line bg-brand-soft sm:h-24 sm:w-24">
             {reservation.offerImageUrl ? (

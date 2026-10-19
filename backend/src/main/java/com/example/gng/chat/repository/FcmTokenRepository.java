@@ -13,5 +13,7 @@ import java.util.Optional;
 public interface FcmTokenRepository extends JpaRepository<FcmToken, Long> {
     Optional<FcmToken> findByToken(String token);
     List<FcmToken> findByUserAndValidUntilAfter(UserModel user, LocalDateTime now);
+    List<FcmToken> findByUser_IdAndValidUntilAfter(Long userId, LocalDateTime now);
     void deleteByValidUntilBefore(LocalDateTime now);
-} 
+    long deleteByToken(String token);
+}

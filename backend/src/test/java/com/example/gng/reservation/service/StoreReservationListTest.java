@@ -16,6 +16,7 @@ import com.example.gng.reservation.entity.ReservationEntity;
 import com.example.gng.reservation.entity.ReservationStatus;
 import com.example.gng.reservation.repository.ReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
@@ -61,7 +62,8 @@ class StoreReservationListTest {
         reservationRepository = mock(ReservationRepository.class);
         userRepository = mock(UserRepository.class);
         service = new ReservationService(reservationRepository, mock(OfferRepository.class), userRepository,
-                mock(PickupCodeGenerator.class), new TokenBucketRateLimiter(), new RateLimitProperties(), 24, 5);
+                mock(PickupCodeGenerator.class), new TokenBucketRateLimiter(), new RateLimitProperties(),
+                mock(ApplicationEventPublisher.class), 24, 5);
 
         BusinessUserModel store = new BusinessUserModel();
         store.setId(STORE_ID);

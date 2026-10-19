@@ -313,7 +313,7 @@ public class ChatWebSocketService {
                 for (FcmToken token : tokens) {
                     fcmNotificationService.sendNotification(
                         token.getToken(),
-                        "Give n' Get. Nowa wiadomość od użytkownika " + messageResponse.getSenderName(),
+                        "Nowa wiadomość od " + messageResponse.getSenderName(),
                         messageResponse.getContent(),
                         "/chats?userId=" + senderId
                     );

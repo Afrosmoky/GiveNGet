@@ -21,6 +21,7 @@ import com.example.gng.reservation.dto.CreateReservationRequest;
 import com.example.gng.reservation.dto.ReservationDTO;
 import com.example.gng.reservation.entity.ReservationEntity;
 import com.example.gng.reservation.entity.ReservationStatus;
+import com.example.gng.reservation.notification.ReservationNotificationEvent;
 import com.example.gng.reservation.repository.ReservationRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -49,6 +51,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -82,6 +85,7 @@ class ReservationServiceTest {
 
     private AutoCloseable mocks;
     private ReservationService service;
+    private ApplicationEventPublisher eventPublisher;
     private RateLimitProperties rateLimitProperties;
     private TokenBucketRateLimiter rateLimiter;
     private AtomicLong clock;
@@ -97,8 +101,9 @@ class ReservationServiceTest {
         clock = new AtomicLong(0);
         rateLimiter = new TokenBucketRateLimiter(clock::get);
 
+        eventPublisher = mock(ApplicationEventPublisher.class);
         service = new ReservationService(reservationRepository, offerRepository, userRepository,
-                pickupCodeGenerator, rateLimiter, rateLimitProperties, TTL_HOURS, MAX_ACTIVE);
+                pickupCodeGenerator, rateLimiter, rateLimitProperties, eventPublisher, TTL_HOURS, MAX_ACTIVE);
 
         buyer = user(BUYER_ID, BUYER_EMAIL);
         seller = user(SELLER_ID, "sprzedawca@example.com");
@@ -150,6 +155,25 @@ class ReservationServiceTest {
         assertEquals(OFFER_ID, dto.offerId());
         // Klient odświeża licznik dostępności bez dodatkowego zapytania: 5 - 2
         assertEquals(3, dto.offerAvailableQuantity());
+
+        // Push „rezerwacja potwierdzona” — zdarzenie z gotowymi wartościami, bez kodu odbioru
+        ReservationNotificationEvent event = capturedEvent();
+        assertEquals(ReservationNotificationEvent.Type.CONFIRMED, event.type());
+        assertEquals(BUYER_ID, event.userId());
+        assertEquals(dto.id(), event.reservationId());
+        assertEquals(2, event.quantity());
+        assertEquals(saved.getExpiresAt(), event.expiresAt());
+    }
+
+    @Test
+    void create_doesNotPublishNotificationWhenRejected() {
+        givenOfferForUpdate(offer(1, OfferStatus.ACTIVE));
+        givenActiveReservedQuantity(1); // nic nie zostało
+
+        assertThrows(OfferNotAvailableException.class,
+                () -> service.create(BUYER_EMAIL, new CreateReservationRequest(OFFER_ID, 1)));
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -487,6 +511,10 @@ class ReservationServiceTest {
         assertNull(reservation.getCancelledAt());
         assertEquals(ReservationStatus.COLLECTED, dto.status());
         assertNotNull(dto.collectedAt());
+
+        ReservationNotificationEvent event = capturedEvent();
+        assertEquals(ReservationNotificationEvent.Type.COLLECTED, event.type());
+        assertEquals(BUYER_ID, event.userId());
     }
 
     @Test
@@ -538,6 +566,7 @@ class ReservationServiceTest {
         assertEquals("RESERVATION_NOT_COLLECTABLE", ex.getCode());
         assertEquals("EXPIRED", ex.getDetails().get("status"));
         verify(reservationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
@@ -876,6 +905,12 @@ class ReservationServiceTest {
     private Pageable capturedPageable() {
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
         verify(reservationRepository).findByUserId(eq(BUYER_ID), captor.capture());
+        return captor.getValue();
+    }
+
+    private ReservationNotificationEvent capturedEvent() {
+        ArgumentCaptor<ReservationNotificationEvent> captor = ArgumentCaptor.forClass(ReservationNotificationEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
         return captor.getValue();
     }
 }

@@ -20,6 +20,10 @@
 
 # Next.js build output
 frontend/.next/
+# Service worker generowany przez Serwist przy `next build` (źródło: src/app/sw.ts)
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/swe-worker-*.js
 frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
 

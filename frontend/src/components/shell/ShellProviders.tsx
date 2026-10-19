@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { WebSocketProvider } from '../../context/WebSocketContext';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import FCMProvider from '../FCMProvider';
+// Side effect: globalny nasłuch beforeinstallprompt od pierwszego renderu (zdarzenie przychodzi raz)
+import '../../utils/installPrompt';
 
 /**
  * Jedna instancja FCM + WebSocket dla całej aplikacji (wcześniej były dwie: osobno

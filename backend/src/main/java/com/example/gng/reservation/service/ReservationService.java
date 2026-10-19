@@ -25,10 +25,12 @@ import com.example.gng.common.exception.BadRequestException;
 import com.example.gng.reservation.dto.StoreReservationDTO;
 import com.example.gng.reservation.entity.ReservationEntity;
 import com.example.gng.reservation.entity.ReservationStatus;
+import com.example.gng.reservation.notification.ReservationNotificationEvent;
 import com.example.gng.reservation.repository.ReservationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -82,6 +84,7 @@ public class ReservationService {
     private final PickupCodeGenerator pickupCodeGenerator;
     private final TokenBucketRateLimiter rateLimiter;
     private final RateLimitProperties rateLimitProperties;
+    private final ApplicationEventPublisher eventPublisher;
     private final long holdTtlHours;
     private final int maxActiveReservationsPerUser;
 
@@ -91,6 +94,7 @@ public class ReservationService {
                              PickupCodeGenerator pickupCodeGenerator,
                              TokenBucketRateLimiter rateLimiter,
                              RateLimitProperties rateLimitProperties,
+                             ApplicationEventPublisher eventPublisher,
                              @Value("${reservation.hold-ttl-hours:24}") long holdTtlHours,
                              @Value("${reservation.max-active-per-user:5}") int maxActiveReservationsPerUser) {
         this.reservationRepository = reservationRepository;
@@ -99,6 +103,7 @@ public class ReservationService {
         this.pickupCodeGenerator = pickupCodeGenerator;
         this.rateLimiter = rateLimiter;
         this.rateLimitProperties = rateLimitProperties;
+        this.eventPublisher = eventPublisher;
         this.holdTtlHours = holdTtlHours;
         this.maxActiveReservationsPerUser = maxActiveReservationsPerUser;
     }
@@ -187,6 +192,9 @@ public class ReservationService {
         // w tej samej transakcji pod blokadą wiersza oferty — wynik jest dokładny i nie
         // wymaga ponownego zapytania.
         int remainingAvailable = available - request.quantity();
+
+        // Push „rezerwacja potwierdzona” — wysyłany dopiero po commicie (ReservationPushNotifier)
+        publishNotification(ReservationNotificationEvent.Type.CONFIRMED, saved);
 
         return toDto(saved, now, remainingAvailable);
     }
@@ -359,6 +367,7 @@ public class ReservationService {
         reservation.setStatus(ReservationStatus.COLLECTED);
         reservation.setCollectedAt(now);
         ReservationEntity saved = reservationRepository.save(reservation);
+        publishNotification(ReservationNotificationEvent.Type.COLLECTED, saved);
 
         logger.info("Potwierdzono odbiór rezerwacji {} ({} szt. z oferty {}) przez konto {}",
                 saved.getId(), saved.getQuantity(),
@@ -458,6 +467,20 @@ public class ReservationService {
     // ------------------------------------------------------------------
     // Pomocnicze
     // ------------------------------------------------------------------
+
+    /** Zdarzenie dla pusha do klienta; niesie wartości, bo listener działa już po zamknięciu sesji. */
+    private void publishNotification(ReservationNotificationEvent.Type type, ReservationEntity reservation) {
+        OfferEntity offer = reservation.getOffer();
+        eventPublisher.publishEvent(new ReservationNotificationEvent(
+                type,
+                reservation.getId(),
+                reservation.getUser().getId(),
+                offer != null ? offer.getName() : "Twoja rezerwacja",
+                reservation.getQuantity(),
+                reservation.getExpiresAt(),
+                offer != null ? offer.getPickupDateFrom() : null,
+                offer != null ? offer.getPickupDateTo() : null));
+    }
 
     /**
      * Sprawdza limit tempa i przerywa żądanie z 429, gdy przekroczony.

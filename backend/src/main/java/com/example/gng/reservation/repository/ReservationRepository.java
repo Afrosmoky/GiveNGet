@@ -8,9 +8,11 @@ import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -138,4 +140,65 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
 
     /** Rezerwacje do wygaszenia przez scheduler: wciąż RESERVED, ale termin minął. */
     List<ReservationEntity> findByStatusAndExpiresAtLessThanEqual(ReservationStatus status, LocalDateTime now);
+
+    // ------------------------------------------------------------------
+    // Powiadomienia push (docs/08 #5)
+    // ------------------------------------------------------------------
+
+    /**
+     * Kandydaci do ostrzeżenia o wygaśnięciu: aktywny hold kończący się w oknie
+     * (now, until], bez wysłanego ostrzeżenia. Oferta i klient dociągnięte od razu —
+     * scheduler buduje z nich treść powiadomienia poza transakcją.
+     */
+    @EntityGraph(attributePaths = {"offer", "user"})
+    @Query("""
+            SELECT r FROM ReservationEntity r
+            WHERE r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+              AND r.expiresAt > :now AND r.expiresAt <= :until
+              AND r.expiryWarningSentAt IS NULL
+            """)
+    List<ReservationEntity> findExpiryWarningCandidates(@Param("now") LocalDateTime now,
+                                                        @Param("until") LocalDateTime until);
+
+    /**
+     * Kandydaci do przypomnienia o odbiorze: aktywny hold, utworzony przed {@code createdBefore}
+     * (żeby nie dublować świeżego potwierdzenia), bez wysłanego przypomnienia. Czy okno
+     * odbioru oferty jest właśnie otwarte, rozstrzyga serwis — godziny są tekstem „HH:mm”.
+     */
+    @EntityGraph(attributePaths = {"offer", "user"})
+    @Query("""
+            SELECT r FROM ReservationEntity r
+            WHERE r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+              AND r.expiresAt > :now
+              AND r.createdAt <= :createdBefore
+              AND r.pickupReminderSentAt IS NULL
+            """)
+    List<ReservationEntity> findPickupReminderCandidates(@Param("now") LocalDateTime now,
+                                                         @Param("createdBefore") LocalDateTime createdBefore);
+
+    /**
+     * Przejęcie wysyłki ostrzeżenia — co najwyżej raz. Warunkowy UPDATE jest atomowy w bazie:
+     * z równoległych przebiegów (także różnych instancji) wiersz zmieni tylko jeden i tylko on
+     * dostanie 1 i wyśle push. Własna transakcja: claim musi być zatwierdzony przed wysyłką.
+     *
+     * @return 1 — przejęto, 0 — ktoś wysłał wcześniej albo rezerwacja przestała być aktywna
+     */
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ReservationEntity r SET r.expiryWarningSentAt = :now
+            WHERE r.id = :id AND r.expiryWarningSentAt IS NULL
+              AND r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+            """)
+    int claimExpiryWarning(@Param("id") String id, @Param("now") LocalDateTime now);
+
+    /** Przejęcie wysyłki przypomnienia o odbiorze — co najwyżej raz (jak {@link #claimExpiryWarning}). */
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ReservationEntity r SET r.pickupReminderSentAt = :now
+            WHERE r.id = :id AND r.pickupReminderSentAt IS NULL
+              AND r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+            """)
+    int claimPickupReminder(@Param("id") String id, @Param("now") LocalDateTime now);
 }

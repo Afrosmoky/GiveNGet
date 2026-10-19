@@ -14,8 +14,11 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -77,6 +80,71 @@ class FcmTokenServiceTest {
         FcmToken saved = captureSaved();
         assertSame(user, saved.getUser());
         assertEquals(TOKEN, saved.getToken());
+    }
+
+    @Test
+    void rotatedTokenReplacesPreviousEntryOfSameUser() {
+        UserModel user = user(7L);
+        FcmToken previous = token(5L, user, "old-token");
+        when(fcmTokenRepository.findByToken("new-token")).thenReturn(Optional.empty());
+        when(fcmTokenRepository.findByToken("old-token")).thenReturn(Optional.of(previous));
+
+        fcmTokenService.register(user, "new-token", "old-token", "Chrome");
+
+        FcmToken saved = captureSaved();
+        assertEquals(5L, saved.getId(), "rotacja podmienia wartość w tym samym wpisie urządzenia");
+        assertEquals("new-token", saved.getToken());
+    }
+
+    @Test
+    void rotationDoesNotTouchPreviousTokenOfAnotherUser() {
+        UserModel user = user(7L);
+        FcmToken foreign = token(5L, user(6L), "someone-else");
+        when(fcmTokenRepository.findByToken("new-token")).thenReturn(Optional.empty());
+        when(fcmTokenRepository.findByToken("someone-else")).thenReturn(Optional.of(foreign));
+
+        fcmTokenService.register(user, "new-token", "someone-else", "Chrome");
+
+        FcmToken saved = captureSaved();
+        assertEquals(null, saved.getId(), "nowy wpis — cudzy token zostaje nietknięty");
+        assertEquals("someone-else", foreign.getToken());
+        verify(fcmTokenRepository, never()).delete(foreign);
+    }
+
+    @Test
+    void knownNewTokenRemovesStaleEntryOfSameDevice() {
+        UserModel user = user(7L);
+        FcmToken current = token(9L, user, "new-token");
+        FcmToken stale = token(5L, user, "old-token");
+        when(fcmTokenRepository.findByToken("new-token")).thenReturn(Optional.of(current));
+        when(fcmTokenRepository.findByToken("old-token")).thenReturn(Optional.of(stale));
+
+        fcmTokenService.register(user, "new-token", "old-token", "Chrome");
+
+        verify(fcmTokenRepository).delete(stale);
+        assertEquals(9L, captureSaved().getId());
+    }
+
+    @Test
+    void unregisterRemovesOnlyOwnToken() {
+        UserModel owner = user(7L);
+        when(fcmTokenRepository.findByToken("mine")).thenReturn(Optional.of(token(1L, owner, "mine")));
+        when(fcmTokenRepository.findByToken("theirs")).thenReturn(Optional.of(token(2L, user(6L), "theirs")));
+
+        assertTrue(fcmTokenService.unregister(owner, "mine"));
+        assertFalse(fcmTokenService.unregister(owner, "theirs"));
+        assertFalse(fcmTokenService.unregister(owner, "unknown"));
+
+        verify(fcmTokenRepository).delete(any(FcmToken.class));
+    }
+
+    private static FcmToken token(Long id, UserModel user, String value) {
+        FcmToken token = new FcmToken();
+        token.setId(id);
+        token.setUser(user);
+        token.setToken(value);
+        token.setValidUntil(LocalDateTime.now().plusDays(1));
+        return token;
     }
 
     private FcmToken captureSaved() {

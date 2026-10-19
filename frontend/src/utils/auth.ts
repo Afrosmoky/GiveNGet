@@ -1,5 +1,7 @@
 // Moduł do zarządzania autoryzacją i tokenami
 
+import { environment } from '../config';
+
 export interface AuthTokenData {
   token: string;
   tokenType: string;
@@ -123,8 +125,35 @@ export const saveAuthData = (data: AuthTokenData): void => {
 };
 
 // Wylogowanie - usunięcie wszystkich danych z localStorage
+/**
+ * Odpina token push tego urządzenia od konta, zanim zniknie JWT — inaczej po wylogowaniu
+ * (np. na wspólnym komputerze) pushe poprzedniego konta dalej by tu przychodziły.
+ * keepalive: żądanie przeżyje przekierowanie po wylogowaniu. Sam token urządzenia zostaje
+ * w localStorage — przy następnym logowaniu backend przypnie go do nowego konta.
+ */
+const unregisterPushToken = (): void => {
+  const pushToken = localStorage.getItem('fcmToken');
+  const jwt = localStorage.getItem('authToken');
+  if (!pushToken || !jwt) return;
+  fetch(`${environment.apiUrl}/api/v1/push/tokens`, {
+    method: 'DELETE',
+    keepalive: true,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `${localStorage.getItem('tokenType') || 'Bearer'} ${jwt}`,
+    },
+    body: JSON.stringify({ token: pushToken }),
+  }).catch(() => {
+    // Nie blokujemy wylogowania — martwy wpis wygaśnie albo przepnie się przy kolejnym logowaniu
+  });
+};
+
 export const logout = (): void => {
   if (typeof window !== 'undefined') {
+    unregisterPushToken();
+    // Token właśnie odpięto w backendzie — następne logowanie (nawet tego samego konta) musi go
+    // zarejestrować na nowo, a nie uznać, że w tej sesji już to zrobiono (utils/push.ts)
+    sessionStorage.removeItem('fcmSyncedForUser');
     localStorage.removeItem('authToken');
     localStorage.removeItem('tokenType');
     localStorage.removeItem('userEmail');

@@ -232,4 +232,8 @@
         <sqlFile path="db/55-static-content-about-help.sql" splitStatements="true" endDelimiter=";"/>
     </changeSet>
 
+    <changeSet id="56-reservation-push-sent-markers" author="piotr.szulc">
+        <sqlFile path="db/56-reservation-push-sent-markers.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
 </databaseChangeLog>

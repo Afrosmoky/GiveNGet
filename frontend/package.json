@@ -13,6 +13,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@react-google-maps/api": "^2.20.7",
+    "@serwist/next": "9.5.13",
     "@stomp/stompjs": "^7.1.1",
     "@types/react-dropzone": "^4.2.2",
     "autoprefixer": "^10.4.16",
@@ -37,6 +38,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.3",
+    "serwist": "9.5.13",
     "typescript": "^5"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"

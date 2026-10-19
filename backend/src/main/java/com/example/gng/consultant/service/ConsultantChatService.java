@@ -369,7 +369,8 @@ public class ConsultantChatService {
             if (chat.getModerator() != null) {
                 recipient = chat.getModerator();
                 senderName = chat.getUser().getFirstName() + " " + chat.getUser().getLastName();
-                clickAction = "/consultant-chat?chatId=" + chat.getId();
+                // Moderator obsługuje czaty w panelu, nie na stronie klienta
+                clickAction = "/admin/consultant-chats";
             }
         } else {
             // Moderator wysyła wiadomość - powiadom użytkownika
@@ -390,7 +391,7 @@ public class ConsultantChatService {
             for (com.example.gng.chat.entity.FcmToken token : tokens) {
                 fcmNotificationService.sendNotification(
                         token.getToken(),
-                        "Give n' Get. Nowa wiadomość w czacie z konsultantem",
+                        "Czat z konsultantem Biovlo",
                         senderName + ": " + lastMessageContent,
                         clickAction
                 );

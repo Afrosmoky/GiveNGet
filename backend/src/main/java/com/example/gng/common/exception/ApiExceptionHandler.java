@@ -34,7 +34,8 @@ import java.util.Map;
         "com.example.gng.store",
         "com.example.gng.report",
         "com.example.gng.offerimport",
-        "com.example.gng.platformstats"
+        "com.example.gng.platformstats",
+        "com.example.gng.notification"
 })
 public class ApiExceptionHandler {
 

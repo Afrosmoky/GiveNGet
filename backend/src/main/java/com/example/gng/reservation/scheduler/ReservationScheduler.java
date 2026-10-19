@@ -1,5 +1,6 @@
 package com.example.gng.reservation.scheduler;
 
+import com.example.gng.reservation.notification.ReservationReminderService;
 import com.example.gng.reservation.service.ReservationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +22,11 @@ public class ReservationScheduler {
     private static final Logger logger = LoggerFactory.getLogger(ReservationScheduler.class);
 
     private final ReservationService reservationService;
+    private final ReservationReminderService reminderService;
 
-    public ReservationScheduler(ReservationService reservationService) {
+    public ReservationScheduler(ReservationService reservationService, ReservationReminderService reminderService) {
         this.reservationService = reservationService;
+        this.reminderService = reminderService;
     }
 
     @Scheduled(cron = "0 */5 * * * ?") // Co 5 minut
@@ -35,6 +38,25 @@ public class ReservationScheduler {
             }
         } catch (Exception e) {
             logger.error("Błąd podczas wygaszania przeterminowanych rezerwacji: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Pushe przed końcem holdu i przy otwarciu okna odbioru (docs/08 #5). Przesunięte o minutę
+     * względem wygaszania, żeby nie konkurować z nim o te same wiersze. Wysyłka co najwyżej raz
+     * zapewnia claim w {@link ReservationReminderService}, nie ten harmonogram.
+     */
+    @Scheduled(cron = "0 1/5 * * * ?")
+    public void sendReservationReminders() {
+        try {
+            reminderService.sendExpiryWarnings();
+        } catch (Exception e) {
+            logger.error("Błąd podczas wysyłki ostrzeżeń o wygaśnięciu: {}", e.getMessage(), e);
+        }
+        try {
+            reminderService.sendPickupReminders();
+        } catch (Exception e) {
+            logger.error("Błąd podczas wysyłki przypomnień o odbiorze: {}", e.getMessage(), e);
         }
     }
 }
