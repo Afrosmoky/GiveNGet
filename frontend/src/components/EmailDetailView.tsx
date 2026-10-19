@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { environment } from '../config';
 import { authorizedFetch } from '../utils/auth';
+import { Alert, Button, Card, CardHeader, Input } from './ui';
 
 interface EmailDetailViewProps {
   userData: {
@@ -18,7 +19,7 @@ export const EmailDetailView: React.FC<EmailDetailViewProps> = ({
   });
 
   // State dla komunikatów
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' });
 
   // State dla loading
   const [loading, setLoading] = useState(false);
@@ -74,136 +75,33 @@ export const EmailDetailView: React.FC<EmailDetailViewProps> = ({
   };
 
   return (
-    <div style={{
-      maxWidth: '800px',
-      margin: '0 auto'
-    }}>
-      {/* Email Section */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '0',
-          boxShadow: 'none',
-          padding: '30px',
-          borderBottom: '1px solid #e2e8f0'
-        }}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '8px',
-                color: '#9ca3af',
-                fontSize: '12px',
-                textTransform: 'uppercase'
-              }}>
-                Email
-              </label>
-              <input
-                type="email"
-                name="newEmail"
-                value={emailData.newEmail}
-                onChange={handleEmailDataChange}
-                style={{
-                  width: '100%',
-                  padding: '0 0 8px 0',
-                  border: 'none',
-                  borderBottom: '1px solid #e2e8f0',
-                  fontSize: '16px',
-                  backgroundColor: 'transparent',
-                  color: '#2d3748',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '8px',
-                color: '#9ca3af',
-                fontSize: '12px',
-                textTransform: 'uppercase'
-              }}>
-                Current password
-              </label>
-              <input
-                type="password"
-                name="currentPassword"
-                value={emailData.currentPassword}
-                onChange={handleEmailDataChange}
-                style={{
-                  width: '100%',
-                  padding: '0 0 8px 0',
-                  border: 'none',
-                  borderBottom: '1px solid #e2e8f0',
-                  fontSize: '16px',
-                  backgroundColor: 'transparent',
-                  color: '#2d3748',
-                  outline: 'none'
-                }}
-              />
-            </div>
-          </div>
-          
-          {/* Komunikat */}
-          {message.text && (
-            <div style={{
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              backgroundColor: message.type === 'success' ? '#f0fff4' : '#fef2f2',
-              border: `1px solid ${message.type === 'success' ? '#68d391' : '#f87171'}`,
-              color: message.type === 'success' ? '#2d3748' : '#dc2626',
-              textAlign: 'center'
-            }}>
-              {message.text}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <button
-              onClick={handleChangeEmail}
-              disabled={loading}
-              style={{
-                width: '200px',
-                padding: '12px',
-                backgroundColor: loading ? '#a0aec0' : '#fbbf24',
-                color: '#1a202c',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'background-color 0.3s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-              onMouseOver={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.backgroundColor = '#f59e0b';
-                }
-              }}
-              onMouseOut={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.backgroundColor = '#fbbf24';
-                }
-              }}
-            >
-              {loading && (
-                <div style={{
-                  width: '16px',
-                  height: '16px',
-                  border: '2px solid #1a202c',
-                  borderTop: '2px solid transparent',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }} />
-              )}
-              {loading ? 'Zmienianie...' : 'Change Email'}
-            </button>
-                     </div>
-         </div>
-       </div>
-   );
- }; 
+    <Card padding="lg">
+      <CardHeader title="Adres e-mail" description="Na ten adres wysyłamy potwierdzenia i odzyskiwanie hasła." />
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleChangeEmail();
+        }}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Nowy e-mail" type="email" name="newEmail" value={emailData.newEmail} onChange={handleEmailDataChange} autoComplete="email" />
+          <Input
+            label="Obecne hasło"
+            type="password"
+            name="currentPassword"
+            value={emailData.currentPassword}
+            onChange={handleEmailDataChange}
+            autoComplete="current-password"
+          />
+        </div>
+        {message.text && <Alert tone={message.type === 'success' ? 'success' : 'danger'}>{message.text}</Alert>}
+        <div className="flex justify-end">
+          <Button type="submit" loading={loading} className="w-full sm:w-auto">
+            {loading ? 'Zmienianie…' : 'Zmień e-mail'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+};

@@ -11,11 +11,70 @@ import { OrdersDetailView } from '../../components/OrdersDetailView';
 import { NotificationsDetailView } from '../../components/NotificationsDetailView';
 import { FavoritesDetailView } from '../../components/FavoritesDetailView';
 import { MyOffersDetailView } from '../../components/MyOffersDetailView';
-import { MdLocalOffer } from "react-icons/md";
-import Image from 'next/image';
-import { useScreenSize } from '../../config/breakpoints';
+import { LuBell, LuChevronRight, LuHeart, LuArrowLeft, LuLogOut, LuReceipt, LuTag, LuTrash2, LuUser } from 'react-icons/lu';
 import UserRankBadge from '../../components/UserRankBadge';
 import FreeOffersCounter from '../../components/FreeOffersCounter';
+import { Alert, Avatar, Button, Card, Dialog, IconButton, PageHeader, cn, pageContainer } from '../../components/ui';
+
+type View = 'main' | 'profile' | 'orders' | 'notifications' | 'favorites' | 'myOffers';
+
+const SUBVIEW_TITLES: Record<Exclude<View, 'main'>, string> = {
+  profile: 'Dane konta',
+  orders: 'Zamówienia',
+  notifications: 'Powiadomienia',
+  favorites: 'Ulubione',
+  myOffers: 'Moje oferty',
+};
+
+/** Podstrona konta: przycisk powrotu + tytuł, treść w tej samej kolumnie co reszta konta. */
+function SubPage({ title, description, onBack, children }: { title: string; description?: string; onBack: () => void; children: React.ReactNode }) {
+  return (
+    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
+      <div className="mb-5 flex items-start gap-2 sm:mb-6">
+        <IconButton label="Wróć do konta" icon={<LuArrowLeft size={20} />} onClick={onBack} className="-ml-2 shrink-0" />
+        <div className="min-w-0 pt-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-ink sm:text-[28px]">{title}</h1>
+          {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+interface MenuRowProps {
+  icon: React.ReactNode;
+  label: string;
+  description?: string;
+  onClick: () => void;
+  tone?: 'default' | 'danger';
+}
+
+function MenuRow({ icon, label, description, onClick, tone = 'default' }: MenuRowProps) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none sm:px-5"
+      >
+        <span
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+            tone === 'danger' ? 'bg-danger-soft text-danger' : 'bg-brand-soft text-brand'
+          )}
+        >
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn('block text-sm font-semibold', tone === 'danger' ? 'text-danger' : 'text-ink')}>{label}</span>
+          {description && <span className="block truncate text-xs text-ink-muted">{description}</span>}
+        </span>
+        {tone !== 'danger' && <LuChevronRight size={18} className="shrink-0 text-ink-subtle" aria-hidden />}
+      </button>
+    </li>
+  );
+}
 
 function ProfilePageContent() {
   const searchParams = useSearchParams();
@@ -32,9 +91,7 @@ function ProfilePageContent() {
     freeOffersCount: 5
   });
   
-  const [currentView, setCurrentView] = useState<'main' | 'profile' | 'orders' | 'notifications' | 'favorites' | 'myOffers'>('main');
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [showContent, setShowContent] = useState(true);
+  const [currentView, setCurrentView] = useState<View>('main');
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -42,11 +99,6 @@ function ProfilePageContent() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // Hook do sprawdzania rozmiaru ekranu
-  const screenSize = useScreenSize();
-  const isSmallScreen = screenSize === 'mobile';
-  const isMediumScreen = screenSize === 'mobile' || screenSize === 'tablet';
 
   useEffect(() => {
     const user = getUserData();
@@ -95,87 +147,13 @@ function ProfilePageContent() {
 
   // Funkcja do generowania URL obrazków
   const profileImageUrl = getImageUrl(userData.userPhotoUrl);
-    
-  console.log('User photo URL:', userData.userPhotoUrl);
-  console.log('Full profile image URL:', profileImageUrl);
 
-  const handleProfileClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('profile');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
+  const openView = (view: View) => {
+    setCurrentView(view);
+    // Podstrona zaczyna się od góry, nie w miejscu przewinięcia menu
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
-
-  const handleBackClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('main');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
-  };
-
-  const handleOrdersClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('orders');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
-  };
-
-  const handleNotificationsClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('notifications');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
-  };
-
-  const handleFavoritesClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('favorites');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
-  };
-
-  const handleMyOffersClick = () => {
-    if (isAnimating) return;
-    
-    setIsAnimating(true);
-    setShowContent(false);
-    
-    setTimeout(() => {
-      setCurrentView('myOffers');
-      setShowContent(true);
-      setIsAnimating(false);
-    }, 300);
-  };
+  const handleBackClick = () => openView('main');
 
   const handlePhotoClick = () => {
     setShowPhotoUpload(true);
@@ -275,7 +253,6 @@ function ProfilePageContent() {
       
       if (response.ok) {
         const newPhotoUrl = await response.text();
-        console.log('New photo URL:', newPhotoUrl);
         localStorage.setItem('userPhotoUrl', newPhotoUrl);
         setUserData(prev => ({
           ...prev,
@@ -294,48 +271,11 @@ function ProfilePageContent() {
     }
   };
 
-  // Funkcja do obliczania odpowiedniej wielkości czcionki na podstawie długości tekstu
-  const calculateFontSize = (text: string): number => {
-    const baseSize = 16;
-    const maxCharacters = 8;
-    
-    if (text.length <= maxCharacters) {
-      return baseSize;
-    }
-    
-    // Oblicz proporcjonalną redukcję wielkości czcionki
-    const reductionFactor = Math.max(0.6, maxCharacters / text.length);
-    return Math.max(10, Math.floor(baseSize * reductionFactor));
-  };
-
-  // Funkcja do generowania stylów dla przycisków
-  const getButtonStyle = () => {
-    return {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      justifyContent: 'center',
-      cursor: 'pointer',
-      padding: isSmallScreen ? '20px 15px' : '40px 25px',
-      borderRadius: '12px',
-      backgroundColor: '#ffffff',
-      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-      transition: 'transform 0.2s',
-      minWidth: isSmallScreen ? '100px' : '120px',
-      maxWidth: isSmallScreen ? '120px' : '150px',
-      flex: isSmallScreen ? '1 1 auto' : '0 0 auto'
-    };
-  };
-
+  const fullName = [userData.firstName, userData.lastName].filter(Boolean).join(' ');
 
   if (currentView === 'profile') {
     return (
-      <div style={{
-        opacity: showContent ? 1 : 0,
-        transition: 'opacity 0.3s ease',
-        minHeight: '400px',
-        marginBottom: 48
-      }}>
+      <SubPage title={SUBVIEW_TITLES.profile} description="Dane osobowe, logowanie i adres odbioru." onBack={handleBackClick}>
         <ProfileDetailView
           userData={userData}
           profileImageUrl={profileImageUrl}
@@ -343,7 +283,6 @@ function ProfilePageContent() {
           selectedPhoto={selectedPhoto}
           isDragOver={isDragOver}
           isUploading={isUploading}
-          onBackClick={handleBackClick}
           onPhotoClick={handlePhotoClick}
           onAbortUpload={handleAbortUpload}
           onFileSelect={handleFileSelect}
@@ -352,605 +291,124 @@ function ProfilePageContent() {
           onDrop={handleDrop}
           onChangePhoto={handleChangePhoto}
         />
-        {/* Sekcja: Usuń konto */}
-        <div style={{ maxWidth: 800, width: '100%', margin: '24px auto 0 auto', padding: '0 10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              onClick={openDeleteModal}
-              style={{
-                padding: '12px 20px',
-                backgroundColor: '#ef4444',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Usuń konto
-            </button>
-          </div>
-        </div>
 
-        {/* Modal potwierdzenia usunięcia */}
-        {showDeleteModal && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-          }}>
-            <div style={{
-              backgroundColor: '#fff', borderRadius: 16, padding: 24,
-              width: '90%', maxWidth: 520
-            }}>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#1f2937' }}>Potwierdzenie usunięcia</h2>
-              <p style={{ marginTop: 12, marginBottom: 8, color: '#374151' }}>
-                Czy na pewno chcesz usunąć konto? Usunięcie zostanie zrealizowane po 14 dniach nieaktywności.
-                Po kliknięciu przycisku <strong>Usuń konto</strong> zostaniesz natychmiast wylogowany.
-              </p>
-              {deleteError && (
-                <div style={{ marginTop: 8, marginBottom: 8, color: '#b91c1c', fontSize: 13 }}>{deleteError}</div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
-                <button onClick={closeDeleteModal} disabled={isDeleting} style={{
-                  padding: '10px 16px', background: '#e5e7eb', color: '#111827', border: 'none', borderRadius: 8,
-                  cursor: isDeleting ? 'not-allowed' : 'pointer'
-                }}>Anuluj</button>
-                <button onClick={confirmDeleteAccount} disabled={isDeleting} style={{
-                  padding: '10px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8,
-                  fontWeight: 700, cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.7 : 1
-                }}>{isDeleting ? 'Usuwanie...' : 'Usuń konto'}</button>
-              </div>
-            </div>
+        {/* Strefa niebezpieczna: usunięcie konta */}
+        <Card className="mt-6 flex flex-col gap-3 border-danger/30 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Usuń konto</h2>
+            <p className="mt-0.5 text-sm text-ink-muted">Konto zostanie usunięte po 14 dniach nieaktywności.</p>
           </div>
-        )}
-      </div>
+          <Button variant="danger" leftIcon={<LuTrash2 size={16} />} onClick={openDeleteModal} className="shrink-0">
+            Usuń konto
+          </Button>
+        </Card>
+
+        <Dialog
+          open={showDeleteModal}
+          onClose={closeDeleteModal}
+          title="Usunąć konto?"
+          footer={
+            <>
+              <Button variant="secondary" onClick={closeDeleteModal} disabled={isDeleting}>
+                Anuluj
+              </Button>
+              <Button variant="danger" onClick={confirmDeleteAccount} loading={isDeleting}>
+                {isDeleting ? 'Usuwanie…' : 'Usuń konto'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink">
+            Czy na pewno chcesz usunąć konto? Usunięcie zostanie zrealizowane po 14 dniach nieaktywności. Po kliknięciu
+            przycisku <strong>Usuń konto</strong> zostaniesz natychmiast wylogowany.
+          </p>
+          {deleteError && (
+            <Alert tone="danger" className="mt-3">
+              {deleteError}
+            </Alert>
+          )}
+        </Dialog>
+      </SubPage>
     );
   }
 
   if (currentView === 'orders') {
     return (
-      <div style={{
-        minHeight: 'calc(100vh - 160px)',
-        backgroundColor: '#f7fafc',
-        padding: '40px 20px',
-        opacity: showContent ? 1 : 0,
-        transition: 'opacity 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', position: 'relative' }}>
-          <button
-            onClick={handleBackClick}
-            className="btn-icon"
-            style={{ position: 'absolute', left: '0' }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19L5 12L12 5" stroke="#4a5568" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#2d3748', margin: '0' }}>Orders</h1>
-        </div>
-        <OrdersDetailView userData={{ email: userData.email }} />
-      </div>
+      <SubPage title={SUBVIEW_TITLES.orders} onBack={handleBackClick}>
+        <OrdersDetailView />
+      </SubPage>
     );
   }
 
   if (currentView === 'notifications') {
     return (
-      <div style={{
-        minHeight: 'calc(100vh - 160px)',
-        backgroundColor: '#f7fafc',
-        padding: '40px 20px',
-        opacity: showContent ? 1 : 0,
-        transition: 'opacity 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', position: 'relative' }}>
-          <button
-            onClick={handleBackClick}
-            className="btn-icon"
-            style={{ position: 'absolute', left: '0' }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19L5 12L12 5" stroke="#4a5568" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#2d3748', margin: '0' }}>Notifications</h1>
-        </div>
-        <NotificationsDetailView userData={{ email: userData.email }} />
-      </div>
+      <SubPage title={SUBVIEW_TITLES.notifications} onBack={handleBackClick}>
+        <NotificationsDetailView />
+      </SubPage>
     );
   }
 
   if (currentView === 'favorites') {
     return (
-      <div style={{
-        minHeight: 'calc(100vh - 160px)',
-        backgroundColor: '#f7fafc',
-        padding: '40px 20px',
-        opacity: showContent ? 1 : 0,
-        transition: 'opacity 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', position: 'relative' }}>
-          <button
-            onClick={handleBackClick}
-            className="btn-icon"
-            style={{ position: 'absolute', left: '0' }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19L5 12L12 5" stroke="#4a5568" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#2d3748', margin: '0' }}>Favorites</h1>
-        </div>
-        <FavoritesDetailView userData={{ email: userData.email }} />
-      </div>
+      <SubPage title={SUBVIEW_TITLES.favorites} onBack={handleBackClick}>
+        <FavoritesDetailView />
+      </SubPage>
     );
   }
 
   if (currentView === 'myOffers') {
     return (
-      <div style={{
-        minHeight: 'calc(100vh - 160px)',
-        backgroundColor: '#f7fafc',
-        padding: '40px 20px',
-        opacity: showContent ? 1 : 0,
-        transition: 'opacity 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '30px', position: 'relative' }}>
-          <button
-            onClick={handleBackClick}
-            className="btn-icon"
-            style={{ position: 'absolute', left: '0' }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19L5 12L12 5" stroke="#4a5568" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#2d3748', margin: '0' }}>Moje oferty</h1>
-        </div>
+      <SubPage title={SUBVIEW_TITLES.myOffers} description="Kliknij ofertę, aby ją edytować." onBack={handleBackClick}>
         <MyOffersDetailView />
-      </div>
+      </SubPage>
     );
   }
 
-  // Main view
+  // Widok główny konta
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 160px)',
-      backgroundColor: '#f7fafc',
-      padding: '20px 10px',
-      opacity: showContent ? 1 : 0,
-      transition: 'opacity 0.3s ease'
-    }}>
-      <div style={{
-        maxWidth: '800px',
-        width: '100%',
-        margin: '0 auto',
-        padding: '0 10px'
-      }}>
-        {/* Main Content - Left and Right Layout */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: isMediumScreen ? 'column' : 'row',
-            gap: '20px',
-            alignItems: isMediumScreen ? 'center' : 'flex-start',
-            justifyContent: 'center',
-            width: '100%'
-          }}
-        >
-          {/* Left Side - Avatar with User Info */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%',
-            maxWidth: '300px',
-            padding: '30px',
-            borderRadius: '12px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-            border: '3px solid white',
-            alignSelf: isMediumScreen ? 'center' : 'flex-start'
-          }}>
-            <div style={{
-              width: '120px',
-              height: '120px',
-              borderRadius: '50%',
-              backgroundColor: '#e2e8f0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              marginBottom: '20px',
-              border: '3px solid white'
-            }}>
-              {profileImageUrl ? (
-                <Image
-                  src={profileImageUrl}
-                  alt="Profile"
-                  width={120}
-                  height={120}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: '#cbd5e0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <svg
-                    width="48"
-                    height="48"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z"
-                      fill="#a0aec0"
-                    />
-                  </svg>
-                </div>
-              )}
-            </div>
+    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
+      <PageHeader title="Konto" description="Twoje dane, oferty i ustawienia." />
 
-            <div style={{
-              textAlign: 'center'
-            }}>
-              <div style={{
-                fontSize: '20px',
-                fontWeight: 'bold',
-                color: '#2d3748',
-                marginBottom: '4px'
-              }}>
-                {userData.firstName || "Current User's"} {userData.lastName || "Name"}
-              </div>
-              <div style={{
-                fontSize: '14px',
-                color: '#718096',
-                marginBottom: '16px'
-              }}>
-                {userData.email || "Current User's email"}
-              </div>
-              
-              {/* Ranga użytkownika */}
-              <div style={{ marginBottom: '12px' }}>
-                <UserRankBadge 
-                  rank={userData.userRank} 
-                  trustPoints={userData.trustPoints}
-                  showPoints={true}
-                  size="medium"
-                  clickable={true}
-                />
-              </div>
-              
-              {/* Licznik darmowych ofert */}
-              <div>
-                <FreeOffersCounter 
-                  freeOffersCount={userData.freeOffersCount}
-                  size="medium"
-                />
-              </div>
-            </div>
+      <div className="grid gap-4 md:grid-cols-[300px_1fr] md:items-start">
+        {/* Wizytówka */}
+        <Card padding="lg" className="flex flex-col items-center gap-3 text-center">
+          <Avatar name={fullName || userData.email} src={profileImageUrl} size="lg" className="!h-24 !w-24 !text-2xl" />
+          <div className="min-w-0 max-w-full">
+            <p className="truncate text-lg font-semibold text-ink">{fullName || 'Twoje konto'}</p>
+            <p className="truncate text-sm text-ink-muted">{userData.email}</p>
           </div>
+          <div className="flex flex-col items-center gap-2 border-t border-line pt-3">
+            <UserRankBadge rank={userData.userRank} trustPoints={userData.trustPoints} showPoints size="medium" clickable />
+            <FreeOffersCounter freeOffersCount={userData.freeOffersCount} size="medium" />
+          </div>
+        </Card>
 
-          {/* Right Side - My Account with Menu */}
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <div style={{
-              padding: '30px 0'
-            }}>
-              <h1 style={{
-                fontSize: '24px',
-                fontWeight: 'bold',
-                color: '#2d3748',
-                marginBottom: '30px',
-                textAlign: 'center'
-              }}>
-                My Account
-              </h1>
+        <div className="flex flex-col gap-4">
+          <Card padding="none" className="overflow-hidden">
+            <ul className="divide-y divide-line">
+              <MenuRow icon={<LuUser size={18} />} label="Dane konta" description="Imię, zdjęcie, e-mail, hasło, adres" onClick={() => openView('profile')} />
+              <MenuRow icon={<LuTag size={18} />} label="Moje oferty" description="Wystawione oferty i ich statusy" onClick={() => openView('myOffers')} />
+              <MenuRow icon={<LuReceipt size={18} />} label="Zamówienia" description="Wkrótce" onClick={() => openView('orders')} />
+              <MenuRow icon={<LuBell size={18} />} label="Powiadomienia" description="Powiadomienia push i ustawienia" onClick={() => openView('notifications')} />
+              <MenuRow icon={<LuHeart size={18} />} label="Ulubione" description="Zapisane oferty i kategorie" onClick={() => openView('favorites')} />
+            </ul>
+          </Card>
 
-              {/* Menu buttons - responsive grid */}
-              <div style={{
-                display: 'flex',
-                flexWrap: isSmallScreen ? 'wrap' : 'nowrap',
-                gap: '15px',
-                justifyContent: isMediumScreen ? 'center' : (isSmallScreen ? 'center' : 'flex-start'),
-                overflowX: isSmallScreen ? 'visible' : 'auto'
-              }}>
-                <div 
-                  style={getButtonStyle()}
-                  onClick={handleProfileClick}
-                  onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z"
-                        fill="#4a5568"
-                      />
-                    </svg>
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('Profile')}px`,
-                    fontWeight: 'bold',
-                    color: '#2d3748',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Profile
-                  </span>
-                </div>
-
-                <div style={getButtonStyle()}
-                onClick={handleOrdersClick}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"
-                        fill="#4a5568"
-                      />
-                    </svg>
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('Orders')}px`,
-                    fontWeight: 'bold',
-                    color: '#2d3748',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Orders
-                  </span>
-                </div>
-
-                <div style={getButtonStyle()}
-                onClick={handleNotificationsClick}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M12,2A2,2 0 0,1 14,4V5.5A6.5,6.5 0 0,1 20.5,12A6.5,6.5 0 0,1 14,18.5V20A2,2 0 0,1 12,22A2,2 0 0,1 10,20V18.5A6.5,6.5 0 0,1 3.5,12A6.5,6.5 0 0,1 10,5.5V4A2,2 0 0,1 12,2M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z"
-                        fill="#4a5568"
-                      />
-                    </svg>
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('Notifications')}px`,
-                    fontWeight: 'bold',
-                    color: '#2d3748',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Notifications
-                  </span>
-                </div>
-
-                <div style={getButtonStyle()}
-                onClick={handleFavoritesClick}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"
-                        fill="#4a5568"
-                      />
-                    </svg>
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('Favorites')}px`,
-                    fontWeight: 'bold',
-                    color: '#2d3748',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Favorites
-                  </span>
-                </div>
-
-                <div style={getButtonStyle()}
-                onClick={handleMyOffersClick}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <MdLocalOffer size={28} color="#4a5568" />
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('My offers')}px`,
-                    fontWeight: 'bold',
-                    color: '#2d3748',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Moje oferty
-                  </span>
-                </div>
-              </div>
-
-              {/* Logout button - separate row, centered */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                marginTop: '30px',
-                marginBottom: isSmallScreen ? '80px' : '20px'
-              }}>
-                <div style={getButtonStyle()}
+          <Card padding="none" className="overflow-hidden">
+            <ul>
+              <MenuRow
+                icon={<LuLogOut size={18} />}
+                label="Wyloguj"
+                tone="danger"
                 onClick={() => {
                   logout();
                   if (typeof window !== 'undefined') {
                     window.location.href = '/login';
                   }
                 }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-                >
-                  <div style={{
-                    width: isSmallScreen ? '50px' : '60px',
-                    height: isSmallScreen ? '50px' : '60px',
-                    backgroundColor: '#f7fafc',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: isSmallScreen ? '12px' : '16px'
-                  }}>
-                    <svg
-                      width="28"
-                      height="28"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.59L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z"
-                        fill="#ef4444"
-                      />
-                    </svg>
-                  </div>
-                  <span style={{
-                    fontSize: `${calculateFontSize('Wyloguj')}px`,
-                    fontWeight: 'bold',
-                    color: '#ef4444',
-                    textAlign: 'center',
-                    width: '100%',
-                    wordWrap: 'break-word',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.2',
-                    hyphens: 'auto',
-                  }}>
-                    Wyloguj
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+              />
+            </ul>
+          </Card>
         </div>
       </div>
     </div>
@@ -963,4 +421,4 @@ export default function ProfilePage() {
       <ProfilePageContent />
     </AuthGuard>
   );
-} 
+}

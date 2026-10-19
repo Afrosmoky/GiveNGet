@@ -18,3 +18,4 @@ export { Price, formatPrice } from './Price';
 export { Dialog } from './Dialog';
 export { Pager } from './Pager';
 export { ActionMenu, type ActionMenuItem } from './ActionMenu';
+export { Alert, type AlertTone } from './Alert';

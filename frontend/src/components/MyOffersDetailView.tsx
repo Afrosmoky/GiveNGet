@@ -3,12 +3,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { environment } from '../config';
 import { authorizedFetch } from '../utils/auth';
-import OfferTileList from './OfferTileList';
+import OfferTile from './OfferTile';
+import { OfferTileSkeleton } from './offer/OfferTileSkeleton';
 import { OfferTileProps, OfferStatus, STATUS_LABELS } from '../types/offer';
-import { FaListUl, FaTableCells, FaFilter } from 'react-icons/fa6';
+import { LuChevronRight, LuCircleAlert, LuLayoutGrid, LuList, LuPackageOpen } from 'react-icons/lu';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getImageUrl } from '../utils/imageUtils';
+import { Badge, Button, Card, Chip, IconButton, type BadgeTone } from './ui';
+
+const STATUS_TONE: Record<OfferStatus, BadgeTone> = {
+  ACTIVE: 'success',
+  INACTIVE: 'neutral',
+  PENDING_VERIFICATION: 'warning',
+};
+
+const TRANSACTION_LABEL: Record<string, string> = { free: 'Za darmo', sale: 'Na sprzedaż', exchange: 'Wymiana' };
+
+const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4';
 
 export function MyOffersDetailView() {
   const [offers, setOffers] = useState<OfferTileProps[]>([]);
@@ -44,20 +56,6 @@ export function MyOffersDetailView() {
     }
   }, [offers, statusFilter]);
 
-  // Funkcja do uzyskiwania kolorów dla statusu
-  const getStatusColors = (status?: OfferStatus) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'bg-green-100 text-green-800';
-      case 'INACTIVE':
-        return 'bg-gray-100 text-gray-800';
-      case 'PENDING_VERIFICATION':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   useEffect(() => {
     const fetchMyOffers = async () => {
       // Zapobiegaj podwójnym zapytaniom
@@ -90,162 +88,98 @@ export function MyOffersDetailView() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-10">
-        <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className={GRID} aria-busy="true" aria-label="Wczytywanie ofert">
+        {Array.from({ length: 4 }, (_, i) => (
+          <OfferTileSkeleton key={i} />
+        ))}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center text-red-600 py-10">
-        {error}
-      </div>
+      <Card padding="lg" role="alert" className="flex flex-col items-center gap-3 text-center">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft text-danger">
+          <LuCircleAlert size={22} aria-hidden />
+        </span>
+        <p className="text-sm text-ink">{error}</p>
+      </Card>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      {/* Nagłówek z przyciskami wyboru widoku */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Moje oferty</h1>
-          <p className="text-gray-600 text-sm mt-1">Kliknij ofertę aby edytować</p>
+    <div className="flex flex-col gap-4">
+      {/* Filtr statusu + przełącznik widoku */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" aria-label="Filtruj według statusu">
+          <Chip selected={statusFilter === 'ALL'} count={offers.length} onClick={() => setStatusFilter('ALL')} className="shrink-0">
+            Wszystkie
+          </Chip>
+          {(['ACTIVE', 'INACTIVE', 'PENDING_VERIFICATION'] as const).map((status) => (
+            <Chip
+              key={status}
+              selected={statusFilter === status}
+              count={offers.filter((offer) => offer.status === status).length}
+              onClick={() => setStatusFilter(status)}
+              className="shrink-0"
+            >
+              {STATUS_LABELS[status]}
+            </Chip>
+          ))}
         </div>
         {!isMobile && (
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setView('tiles')} 
-              className={`p-2 rounded-lg border-2 transition-all ${
-                view === 'tiles' 
-                  ? 'border-yellow-400 bg-yellow-50 text-yellow-600' 
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-              }`}
-              aria-label="Widok kafelków"
-            >
-              <FaTableCells size={20} />
-            </button>
-            <button 
-              onClick={() => setView('list')} 
-              className={`p-2 rounded-lg border-2 transition-all ${
-                view === 'list' 
-                  ? 'border-yellow-400 bg-yellow-50 text-yellow-600' 
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-              }`}
-              aria-label="Widok listy"
-            >
-              <FaListUl size={20} />
-            </button>
+          <div className="flex shrink-0 gap-1 rounded-ui-md border border-line bg-surface p-0.5">
+            <IconButton label="Widok kafelków" icon={<LuLayoutGrid size={18} />} active={view === 'tiles'} onClick={() => setView('tiles')} className="h-8 w-8" />
+            <IconButton label="Widok listy" icon={<LuList size={18} />} active={view === 'list'} onClick={() => setView('list')} className="h-8 w-8" />
           </div>
         )}
       </div>
 
-      {/* Filtr statusu */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <FaFilter className="text-gray-600" size={16} />
-          <span className="text-sm font-medium text-gray-700">Filtruj według statusu:</span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setStatusFilter('ALL')}
-            className={`px-3 py-1 text-sm font-medium rounded-full border transition-all ${
-              statusFilter === 'ALL'
-                ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            Wszystkie ({offers.length})
-          </button>
-          {(['ACTIVE', 'INACTIVE', 'PENDING_VERIFICATION'] as const).map((status) => {
-            const count = offers.filter(offer => offer.status === status).length;
-            return (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1 text-sm font-medium rounded-full border transition-all ${
-                  statusFilter === status
-                    ? `${getStatusColors(status)} border-current`
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {STATUS_LABELS[status]} ({count})
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Wyświetlanie ofert */}
-      {loading ? (
-        <div className="flex justify-center items-center p-8">
-          <div className="w-8 h-8 border-4 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
-        </div>
-      ) : offers.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 text-lg">Nie masz jeszcze żadnych ofert</p>
-        </div>
+      {offers.length === 0 ? (
+        <Card padding="lg" className="flex flex-col items-center gap-3 py-10 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+            <LuPackageOpen size={22} aria-hidden />
+          </span>
+          <p className="text-sm text-ink-muted">Nie masz jeszcze żadnych ofert.</p>
+          <Button href="/create-offer">Dodaj pierwszą ofertę</Button>
+        </Card>
       ) : filteredOffers.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 text-lg">Brak ofert z wybranym statusem</p>
-        </div>
+        <p className="py-10 text-center text-sm text-ink-muted">Brak ofert z wybranym statusem.</p>
       ) : view === 'tiles' ? (
-        <OfferTileList 
-          offers={filteredOffers} 
-          loading={false}
-          emptyMessage=""
-          tileWidth={200}
-          tileHeight={220}
-          imageWidth={160}
-          imageHeight={100}
-          isEditing={true}
-        />
-      ) : (
-        <div className="space-y-4">
+        <div className={GRID}>
           {filteredOffers.map((offer) => (
-            <Link key={offer.id} href={`/offers/edit/${offer.id}`} className="block">
-              <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-4 gap-4 hover:shadow-md transition-shadow cursor-pointer">
-                <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                  <Image 
-                    src={getImageUrl(offer.imageUrl)} 
-                    alt={offer.name} 
-                    width={96} 
-                    height={64} 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 text-lg truncate">{offer.name}</h3>
-                  <p className="text-gray-600 text-sm mt-1">{offer.location}</p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                      offer.transactionType === 'free' 
-                        ? 'bg-green-100 text-green-800' 
-                        : offer.transactionType === 'sale' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-purple-100 text-purple-800'
-                    }`}>
-                      {offer.transactionType === 'free' ? 'Za darmo' : 
-                       offer.transactionType === 'sale' ? 'Na sprzedaż' : 'Wymiana'}
-                    </span>
-                    {offer.status && (
-                      <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusColors(offer.status)}`}>
-                        {STATUS_LABELS[offer.status]}
-                      </span>
-                    )}
-                    {offer.distance && (
-                      <span className="text-blue-600 text-sm font-medium">({offer.distance})</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-shrink-0">
-                  <div className="text-yellow-600 text-sm font-medium">Edytuj</div>
-                </div>
-              </div>
-            </Link>
+            <OfferTile key={offer.id} {...offer} isEditing />
           ))}
         </div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {filteredOffers.map((offer) => (
+            <li key={offer.id}>
+              <Link
+                href={`/offers/edit/${offer.id}`}
+                className="flex items-center gap-3 rounded-ui-lg border border-line bg-surface p-3 shadow-card transition-shadow hover:border-line-strong hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              >
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-ui-md bg-brand-soft sm:h-16 sm:w-24">
+                  <Image src={getImageUrl(offer.imageUrl)} alt="" fill sizes="96px" className="object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-ink">{offer.name}</p>
+                  {offer.location && <p className="truncate text-sm text-ink-muted">{offer.location}</p>}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <Badge tone="brand">{TRANSACTION_LABEL[offer.transactionType] ?? 'Wymiana'}</Badge>
+                    {offer.status && <Badge tone={STATUS_TONE[offer.status]}>{STATUS_LABELS[offer.status]}</Badge>}
+                    {offer.distance && <span className="text-xs text-ink-subtle">{offer.distance}</span>}
+                  </div>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand">
+                  <span className="hidden sm:inline">Edytuj</span>
+                  <LuChevronRight size={16} aria-hidden />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
-} 
+}

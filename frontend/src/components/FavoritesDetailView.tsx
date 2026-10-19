@@ -1,40 +1,11 @@
 import React from 'react';
+import { ComingSoon } from './profile/ComingSoon';
+import { Button } from './ui';
 
-interface FavoritesDetailViewProps {
-  userData: {
-    email: string;
-  };
-}
-
-export const FavoritesDetailView: React.FC<FavoritesDetailViewProps> = ({
-}) => {
-  return (
-    <div style={{
-      maxWidth: '800px',
-      margin: '0 auto'
-    }}>
-      {/* Favorites Section */}
-      <div style={{
-        backgroundColor: '#ffffff',
-        borderRadius: '0',
-        boxShadow: 'none',
-        padding: '30px',
-        borderBottom: '1px solid #e2e8f0',
-        textAlign: 'center',
-        minHeight: '200px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <h1 style={{
-          fontSize: '48px',
-          fontWeight: 'bold',
-          color: '#9ca3af',
-          margin: '0'
-        }}>
-          T.B.D
-        </h1>
-      </div>
-    </div>
-  );
-}; 
+export const FavoritesDetailView: React.FC = () => (
+  <ComingSoon
+    title="Ulubione w koncie"
+    description="Ulubione oferty i kategorie masz już na osobnej stronie — tu pojawi się ich podsumowanie."
+    action={<Button href="/favorites">Przejdź do ulubionych</Button>}
+  />
+);
