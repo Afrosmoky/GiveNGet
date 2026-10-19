@@ -8,7 +8,7 @@ Stan na 10.2026. Rdzeń przepływu (rezerwacja → odbiór → raport, cena, pra
 | 2 | **Zgody RODO + akceptacja regulaminu** | Wymóg prawny przy pilotażu pod marką sieci | — | **zrobione** (10.2026) |
 | 3 | **Publiczny profil sklepu** | Użytkownik widzi sklep i jego oferty | fundament profilu jest | **zrobione** (10.2026) |
 | 4 | **Statystyki platformowe pod pilotaż** | Materiał do rozmów z siecią (aktywni, sklepy, rezerwacje, odbiory) | `DashboardStatisticsService` (częściowo) | **zrobione** (10.2026) |
-| 5 | **FCM + powiadomienia rezerwacji** | Potwierdzenie rezerwacji, ostrzeżenie o wygaśnięciu, przypomnienie odbioru | naprawa FirebaseConfig (projekt Firebase `givenget-b5ef0` — Piotra, dostępny; `serviceAccountKey.json` na dysku) | w toku |
+| 5 | **FCM + powiadomienia rezerwacji** | Potwierdzenie rezerwacji, ostrzeżenie o wygaśnięciu, przypomnienie odbioru | naprawa FirebaseConfig (projekt Firebase `givenget-b5ef0` — Piotra, dostępny; `serviceAccountKey.json` na dysku) | **zrobione (10.2026)** — web push zweryfikowany na localhost; iOS i link HTTPS do weryfikacji na VPS (patrz docs/07 §3e) |
 | 6 | **Panel pracowników sklepu (UI firmy)** | Firma sama zakłada konta pracowników i odbiera im dostęp — bez curla | provisioning `POST /api/v1/store-employees` był | **zrobione** (10.2026) |
 | 7 | **Cena przed obniżką (`originalPrice`)** | Pokazuje oszczędność („normalnie X, teraz Y" + % rabatu) — rdzeń wartości „food rescue", mocny argument na spotkaniach z partnerami | jest `price`/`quantity` | **zrobione** (migracja `53`, szczegóły niżej) |
 

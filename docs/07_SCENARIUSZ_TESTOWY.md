@@ -110,13 +110,22 @@ Rejestracja **tworzy konto nawet gdy mail aktywacyjny nie pójdzie** (SMTP lokal
 5. Zakres z przeszłości bez danych → kafelki „przepływ" = 0, „stan" bez zmian.
 6. API: `from`>`to` → `400 INVALID_DATE_RANGE`; zła data → `400 INVALID_PARAMETER`; nie-ADMIN → `403`.
 
-## 3e. Powiadomienia FCM (po zbudowaniu #5)
-> Wymaga: #5 dowiezione, przebudowany stack, `serviceAccountKey.json` zamontowany (log backendu NIE pokazuje „FCM wyłączone"). Web push działa na `localhost` (bezpieczny kontekst), ale wymaga zgody na powiadomienia w przeglądarce i zarejestrowanego tokenu FCM (aplikacja robi to po zalogowaniu — zezwól, gdy przeglądarka zapyta).
-1. Zaloguj usera w przeglądarce, **zezwól na powiadomienia**. Sprawdź, że token trafił do bazy: `SELECT user_id, token FROM fcm_token;` (powinien być wpis dla usera).
-2. **Potwierdzenie rezerwacji:** zarezerwuj ofertę → powinno przyjść powiadomienie „Rezerwacja potwierdzona" z kodem odbioru (klik → `/reservations/{id}`).
-3. **Odbiór:** pracownik potwierdza → user dostaje „Odebrano…".
-4. **Ostrzeżenie o wygaśnięciu:** trudne do odtworzenia na żywo (wysyłane ~2 h przed `expiresAt` przez scheduler, raz) — pokryte testem IT. Opcjonalnie: ustaw krótkie `RESERVATION_HOLD_TTL`/`RESERVATION_EXPIRY_WARNING_BEFORE` w `.env`, zrestartuj backend i poczekaj na przebieg schedulera.
-5. **Brak klucza = brak crasha:** jeśli celowo odmontujesz klucz, backend wstaje w trybie „FCM wyłączone" (log WARN), a rezerwacje/odbiory działają normalnie (wysyłka to no-op).
+## 3e. Powiadomienia FCM i PWA (#5)
+> Wymaga: przebudowany stack i klucz Firebase zamontowany w kontenerze (`FIREBASE_CREDENTIALS_FILE`, domyślnie `backend/src/main/resources/serviceAccountKey.json`). Log backendu: `FCM włączone: Firebase zainicjalizowany (projekt givenget-b5ef0)`. Web push działa na `localhost` (bezpieczny kontekst).
+1. **Zgoda:** zaloguj usera, zarezerwuj ofertę — pod kodem odbioru pojawia się karta „Powiadomienia o rezerwacjach” → **Włącz** → zezwól w przeglądarce. Aplikacja NIE pyta sama przy starcie. Token w bazie: `SELECT user_id, device_name FROM fcm_token;`.
+2. **Potwierdzenie rezerwacji:** push „Rezerwacja potwierdzona” z nazwą oferty, liczbą sztuk i terminem (bez kodu odbioru — to sekret widoczny na zablokowanym ekranie). Klik → `/reservations?reservationId=…` (rezerwacja podświetlona i przewinięta).
+3. **Odbiór:** pracownik potwierdza → „Odbiór potwierdzony”.
+4. **Ostrzeżenie o wygaśnięciu i przypomnienie o odbiorze** (scheduler co 5 min, w minutach 1, 6, 11…): domyślnie ostrzeżenie 120 min przed końcem holdu, przypomnienie po otwarciu okna odbioru oferty (najwcześniej 30 min po rezerwacji). Do testu: `RESERVATION_EXPIRY_WARNING_BEFORE_MINUTES=1500 RESERVATION_PICKUP_REMINDER_MIN_AGE_MINUTES=0 docker compose up -d backend` i poczekaj na przebieg. Kolejny przebieg nie wysyła nic ponownie (claim `*_sent_at`, migracja 56). Na koniec wróć do domyślnych: `docker compose up -d backend`.
+5. **Zmiana konta na tym samym urządzeniu:** wyloguj, zaloguj inne konto → log `Token FCM urządzenia przepięty z konta X na Y`. Wylogowanie odpina token (`DELETE /api/v1/push/tokens` → 204).
+6. **Martwy token:** wpis z nieprawidłowym tokenem znika po pierwszym pushu (log `Usunięto martwy token FCM`).
+7. **Brak klucza = brak crasha:** bez pliku klucza backend wstaje z `FCM wyłączone` (WARN), rezerwacje działają, wysyłka to no-op. Uszkodzony klucz = backend NIE wstaje (celowo — błąd konfiguracji).
+8. **PWA:** Chrome pokazuje ikonę instalacji w pasku adresu, a na „Moje rezerwacje” kartę „Zainstaluj aplikację Biovlo”. DevTools → Application: `/sw.js` (scope `/`, Serwist) i `/firebase-messaging-sw.js` (scope `/firebase-cloud-messaging-push-scope`). Offline (DevTools → Network → Offline) nawigacja pokazuje „Jesteś offline”.
+
+**Do weryfikacji na VPS (wymaga prawdziwego HTTPS):**
+- iOS (16.4+): push działa tylko w aplikacji dodanej do ekranu początkowego, z HTTPS — tam sprawdzić zgodę, token i dostarczenie.
+- Link w powiadomieniu przez `webpush.fcm_options.link` (FCM przyjmuje tylko HTTPS) — na localhost deep link niesie pole `url` obsługiwane przez service worker.
+- Ustawić `FRONT_APP_URL` na publiczny adres https (z niego budowany jest link i ikona powiadomienia) oraz `FIREBASE_CREDENTIALS_FILE` na ścieżkę klucza na serwerze.
+- Android/Chrome mobile: instalacja PWA i push w tle po zamknięciu karty.
 
 ## 4. Uwagi
 - Raport/statystyki liczą dni w **UTC** (doba kończy się w PL ~1:00–2:00) — adnotacja jest w UI.
