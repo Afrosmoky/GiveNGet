@@ -2,6 +2,7 @@ package com.example.gng.offer.service;
 
 import com.example.gng.auth.service.SessionService;
 import com.example.gng.common.exception.BadRequestException;
+import com.example.gng.common.exception.ResourceNotFoundException;
 import com.example.gng.common.exception.ForbiddenOperationException;
 import com.example.gng.exceptions.InvalidRequestException;
 import com.example.gng.geocode.dto.SimplifiedGeocodingResponse;
@@ -152,9 +153,13 @@ public class OfferService {
      * Rozstrzygnięta cena oferty — para gotowa do zapisania na encji.
      * Oba pola razem albo oba null; nie ma sensownego stanu „cena bez waluty".
      */
-    public record OfferPricing(BigDecimal price, String currency) {
+    public record OfferPricing(BigDecimal price, String currency, BigDecimal originalPrice) {
+        public OfferPricing(BigDecimal price, String currency) {
+            this(price, currency, null);
+        }
+
         static OfferPricing none() {
-            return new OfferPricing(null, null);
+            return new OfferPricing(null, null, null);
         }
     }
 
@@ -166,14 +171,28 @@ public class OfferService {
      * powstałaby kwota, której nikt nigdy nie zapłaci, a raport policzyłby ją jako wartość.
      */
     public static OfferPricing resolvePricingForCreate(TransactionType type, BigDecimal price, String currency) {
+        return resolvePricingForCreate(type, price, currency, null);
+    }
+
+    /**
+     * Jak wyżej, z ceną przed obniżką (docs/08 #7): opcjonalna, tylko dla sprzedaży,
+     * musi być wyższa od ceny. Ta sama metoda obsługuje formularz i import Excela.
+     */
+    public static OfferPricing resolvePricingForCreate(TransactionType type, BigDecimal price, String currency,
+                                                       BigDecimal originalPrice) {
         if (type == TransactionType.sale) {
             if (price == null) {
                 throw priceRequired();
             }
-            return new OfferPricing(requireValidPrice(price), normalizeCurrency(currency));
+            BigDecimal validPrice = requireValidPrice(price);
+            BigDecimal validOriginal = originalPrice != null
+                    ? requireOriginalAbovePrice(requireValidOriginalPrice(originalPrice), validPrice, false)
+                    : null;
+            return new OfferPricing(validPrice, normalizeCurrency(currency), validOriginal);
         }
 
         requireNoPricing(type, price, currency);
+        requireNoOriginalPrice(type, originalPrice);
         return OfferPricing.none();
     }
 
@@ -186,8 +205,30 @@ public class OfferService {
      */
     static OfferPricing resolvePricingForUpdate(TransactionType type, BigDecimal price, String currency,
                                                 BigDecimal currentPrice, String currentCurrency) {
+        return resolvePricingForUpdate(type, price, currency, null, false, currentPrice, currentCurrency, null);
+    }
+
+    /**
+     * Edycja z ceną przed obniżką. originalPrice: null = bez zmian (klient, który nie zna pola,
+     * nie skasuje przeceny); usunięcie tylko jawnie przez clearOriginalPrice. Zmiana typu na
+     * darmowy/wymianę czyści przecenę razem z ceną.
+     *
+     * Gdy zostaje zapisana cena przed obniżką, a nowa cena ją dogania — odrzucamy (400),
+     * a nie kasujemy przeceny po cichu: sprzedawca ma świadomie poprawić obie wartości.
+     */
+    static OfferPricing resolvePricingForUpdate(TransactionType type, BigDecimal price, String currency,
+                                                BigDecimal originalPrice, boolean clearOriginalPrice,
+                                                BigDecimal currentPrice, String currentCurrency,
+                                                BigDecimal currentOriginalPrice) {
+        if (clearOriginalPrice && originalPrice != null) {
+            throw new BadRequestException("INVALID_ORIGINAL_PRICE",
+                    "Nie można jednocześnie ustawić i usunąć ceny przed obniżką.",
+                    Map.of("originalPrice", originalPrice.toPlainString(), "clearOriginalPrice", true));
+        }
+
         if (type != TransactionType.sale) {
             requireNoPricing(type, price, currency);
+            requireNoOriginalPrice(type, originalPrice);
             return OfferPricing.none();
         }
 
@@ -195,9 +236,17 @@ public class OfferService {
         if (effectivePrice == null) {
             throw priceRequired();
         }
+        BigDecimal validPrice = requireValidPrice(effectivePrice);
+
+        BigDecimal validOriginal = null;
+        if (originalPrice != null) {
+            validOriginal = requireOriginalAbovePrice(requireValidOriginalPrice(originalPrice), validPrice, false);
+        } else if (!clearOriginalPrice && currentOriginalPrice != null) {
+            validOriginal = requireOriginalAbovePrice(currentOriginalPrice, validPrice, true);
+        }
 
         String effectiveCurrency = hasText(currency) ? currency : currentCurrency;
-        return new OfferPricing(requireValidPrice(effectivePrice), normalizeCurrency(effectiveCurrency));
+        return new OfferPricing(validPrice, normalizeCurrency(effectiveCurrency), validOriginal);
     }
 
     /**
@@ -208,22 +257,57 @@ public class OfferService {
      * z bazy przy przekroczeniu DECIMAL(10,2).
      */
     private static BigDecimal requireValidPrice(BigDecimal price) {
-        if (price.signum() <= 0) {
-            throw new BadRequestException("INVALID_PRICE",
-                    "Cena musi być większa od zera.",
-                    Map.of("price", price.toPlainString()));
+        return requireValidAmount(price, "INVALID_PRICE", "Cena", "price");
+    }
+
+    private static BigDecimal requireValidOriginalPrice(BigDecimal originalPrice) {
+        return requireValidAmount(originalPrice, "INVALID_ORIGINAL_PRICE", "Cena przed obniżką", "originalPrice");
+    }
+
+    private static BigDecimal requireValidAmount(BigDecimal amount, String code, String label, String field) {
+        if (amount.signum() <= 0) {
+            throw new BadRequestException(code,
+                    label + " musi być większa od zera.",
+                    Map.of(field, amount.toPlainString()));
         }
-        if (price.stripTrailingZeros().scale() > PRICE_SCALE) {
-            throw new BadRequestException("INVALID_PRICE",
-                    "Cena może mieć najwyżej 2 miejsca po przecinku.",
-                    Map.of("price", price.toPlainString(), "maxDecimals", PRICE_SCALE));
+        if (amount.stripTrailingZeros().scale() > PRICE_SCALE) {
+            throw new BadRequestException(code,
+                    label + " może mieć najwyżej 2 miejsca po przecinku.",
+                    Map.of(field, amount.toPlainString(), "maxDecimals", PRICE_SCALE));
         }
-        if (price.compareTo(MAX_PRICE) > 0) {
-            throw new BadRequestException("INVALID_PRICE",
-                    "Cena przekracza dopuszczalną wartość.",
-                    Map.of("price", price.toPlainString(), "maxPrice", MAX_PRICE.toPlainString()));
+        if (amount.compareTo(MAX_PRICE) > 0) {
+            throw new BadRequestException(code,
+                    label + " przekracza dopuszczalną wartość.",
+                    Map.of(field, amount.toPlainString(), "maxPrice", MAX_PRICE.toPlainString()));
         }
-        return price.setScale(PRICE_SCALE, RoundingMode.UNNECESSARY);
+        return amount.setScale(PRICE_SCALE, RoundingMode.UNNECESSARY);
+    }
+
+    /**
+     * Cena przed obniżką musi być wyższa od ceny — inaczej „przecena” pokazywałaby 0 % albo podwyżkę.
+     *
+     * @param fromStoredValue true, gdy porównujemy z zapisaną wartością (edycja zmieniła tylko cenę) —
+     *                        wtedy komunikat podpowiada, że trzeba poprawić też cenę przed obniżką
+     */
+    private static BigDecimal requireOriginalAbovePrice(BigDecimal originalPrice, BigDecimal price, boolean fromStoredValue) {
+        if (originalPrice.compareTo(price) > 0) {
+            return originalPrice;
+        }
+        String message = fromStoredValue
+                ? "Nowa cena (" + price.toPlainString() + ") nie jest niższa od zapisanej ceny przed obniżką ("
+                    + originalPrice.toPlainString() + "). Podnieś też cenę przed obniżką albo ją usuń."
+                : "Cena przed obniżką (" + originalPrice.toPlainString() + ") musi być wyższa od ceny ("
+                    + price.toPlainString() + "). Popraw ją albo zostaw puste pole, jeśli oferta nie jest przeceniona.";
+        throw new BadRequestException("ORIGINAL_PRICE_NOT_HIGHER", message,
+                Map.of("price", price.toPlainString(), "originalPrice", originalPrice.toPlainString()));
+    }
+
+    private static void requireNoOriginalPrice(TransactionType type, BigDecimal originalPrice) {
+        if (originalPrice != null) {
+            throw new BadRequestException("ORIGINAL_PRICE_NOT_ALLOWED",
+                    "Cenę przed obniżką można podać tylko dla oferty sprzedażowej.",
+                    Map.of("offerType", type != null ? type.name() : "null"));
+        }
     }
 
     /**
@@ -252,6 +336,31 @@ public class OfferService {
                     "Oferta bez sprzedaży nie może mieć ceny ani waluty.",
                     Map.of("offerType", type != null ? type.name() : "null"));
         }
+    }
+
+    /**
+     * Podkategoria oferty przy tworzeniu i edycji. Błędy w formacie 6.3 — wcześniej szły
+     * jako 500 bez kodu, więc klient nie mógł wskazać użytkownikowi, które pole poprawić.
+     */
+    private SubcategoryEntity resolveSubcategory(CategoryEntity category, Integer subcategoryId) {
+        if (subcategoryId == null) {
+            if (!category.getSubcategories().isEmpty()) {
+                throw new BadRequestException("SUBCATEGORY_REQUIRED",
+                        "Kategoria „" + category.getName() + "” wymaga wyboru podkategorii.",
+                        Map.of("categoryId", category.getId()));
+            }
+            return null;
+        }
+        SubcategoryEntity subcategory = subcategoryRepository.findById(subcategoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("SUBCATEGORY_NOT_FOUND",
+                        "Wybrana podkategoria nie istnieje.",
+                        Map.of("subcategoryId", subcategoryId)));
+        if (!subcategory.getCategory().getId().equals(category.getId())) {
+            throw new BadRequestException("SUBCATEGORY_MISMATCH",
+                    "Podkategoria nie należy do wybranej kategorii.",
+                    Map.of("subcategoryId", subcategoryId, "categoryId", category.getId()));
+        }
+        return subcategory;
     }
 
     private static BadRequestException priceRequired() {
@@ -327,22 +436,7 @@ public class OfferService {
         CategoryEntity category = categoryRepository.findById(createOfferDTO.getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Kategoria nie została znalezona"));
 
-        // Walidacja podkategorii - sprawdź czy kategoria ma podkategorie
-        SubcategoryEntity subcategory = null;
-        if (createOfferDTO.getSubcategoryId() != null) {
-            subcategory = subcategoryRepository.findById(createOfferDTO.getSubcategoryId())
-                    .orElseThrow(() -> new RuntimeException("Podkategoria nie została znalezona"));
-            
-            // Sprawdź czy podkategoria należy do wybranej kategorii
-            if (!subcategory.getCategory().getId().equals(category.getId())) {
-                throw new InvalidRequestException("Podkategoria nie należy do wybranej kategorii");
-            }
-        } else {
-            // Jeśli nie podano podkategorii, sprawdź czy kategoria ma podkategorie
-            if (!category.getSubcategories().isEmpty()) {
-                throw new InvalidRequestException("Kategoria '" + category.getName() + "' wymaga wyboru podkategorii");
-            }
-        }
+        SubcategoryEntity subcategory = resolveSubcategory(category, createOfferDTO.getSubcategoryId());
 
         // Parsuj współrzędne
         String[] coords = createOfferDTO.getCoordinates().split(",");
@@ -366,9 +460,11 @@ public class OfferService {
         offer.setQuantity(resolveQuantityForCreate(createOfferDTO.getQuantity()));
 
         OfferPricing pricing = resolvePricingForCreate(
-                createOfferDTO.getOfferType(), createOfferDTO.getPrice(), createOfferDTO.getCurrency());
+                createOfferDTO.getOfferType(), createOfferDTO.getPrice(), createOfferDTO.getCurrency(),
+                createOfferDTO.getOriginalPrice());
         offer.setPrice(pricing.price());
         offer.setCurrency(pricing.currency());
+        offer.setOriginalPrice(pricing.originalPrice());
 
         // Moderacja: jeśli treść zawiera słowa/regexy zakazane, ustaw status na PENDING
         boolean containsForbidden = forbiddenPatternService.containsForbiddenContent(
@@ -608,28 +704,19 @@ public class OfferService {
         // Ustaw pole recommended
         preview.setRecommended(offer.getRecommended());
 
-        // Cena i waluta (null dla ofert darmowych i wymian)
-        preview.setPrice(offer.getPrice());
-        preview.setCurrency(offer.getCurrency());
+        // Cena, waluta i przecena (null dla ofert darmowych i wymian) — wspólnie z ulubionymi
+        OfferPreviewSupport.applyPricing(preview, offer);
 
         // Ustaw liczbę sztuk i dostępność (quantity minus sztuki zajęte rezerwacjami)
         preview.setQuantity(offer.getQuantity());
         preview.setAvailableQuantity(availableQuantity(offer, reservedByOffer, nowUtc()));
+        preview.setPickupDateTo(offer.getPickupDateTo());
 
         // Ustaw status oferty
         preview.setStatus(offer.getStatus());
 
-        // Sprzedawca — do linku na profil sklepu z kafelka. Nazwę podajemy tylko dla firm:
-        // imię i nazwisko osoby prywatnej nie musi wisieć na każdym kafelku listy.
-        UserModel seller = offer.getUser();
-        if (seller != null) {
-            preview.setSellerId(seller.getId());
-            preview.setSellerType(seller.getType());
-            if (seller.getType() == UserType.COMPANY
-                    && Hibernate.unproxy(seller) instanceof BusinessUserModel company) {
-                preview.setStoreName(company.getCompanyName());
-            }
-        }
+        // Sprzedawca — do linku na profil sklepu z kafelka (wspólnie z ulubionymi)
+        OfferPreviewSupport.applySeller(preview, offer.getUser());
 
         // Ustaw ID kategorii i podkategorii
         if (offer.getCategory() != null) {
@@ -855,6 +942,8 @@ public class OfferService {
         details.setPickupDateTo(offer.getPickupDateTo());
         details.setPrice(offer.getPrice());
         details.setCurrency(offer.getCurrency());
+        details.setOriginalPrice(offer.getOriginalPrice());
+        details.setDiscountPercent(OfferPreviewSupport.discountPercent(offer.getPrice(), offer.getOriginalPrice()));
         details.setLatitude(offer.getLatitude());
         details.setLongitude(offer.getLongitude());
         details.setLocation(offer.getLocation());
@@ -989,22 +1078,7 @@ public class OfferService {
         CategoryEntity category = categoryRepository.findById(updateOfferDTO.getCategoryId())
                 .orElseThrow(() -> new InvalidRequestException("Kategoria nie została znalezona"));
 
-        // Walidacja podkategorii - sprawdź czy kategoria ma podkategorie
-        SubcategoryEntity subcategory = null;
-        if (updateOfferDTO.getSubcategoryId() != null) {
-            subcategory = subcategoryRepository.findById(updateOfferDTO.getSubcategoryId())
-                    .orElseThrow(() -> new InvalidRequestException("Podkategoria nie została znalezona"));
-            
-            // Sprawdź czy podkategoria należy do wybranej kategorii
-            if (!subcategory.getCategory().getId().equals(category.getId())) {
-                throw new InvalidRequestException("Podkategoria nie należy do wybranej kategorii");
-            }
-        } else {
-            // Jeśli nie podano podkategorii, sprawdź czy kategoria ma podkategorie
-            if (!category.getSubcategories().isEmpty()) {
-                throw new InvalidRequestException("Kategoria '" + category.getName() + "' wymaga wyboru podkategorii");
-            }
-        }
+        SubcategoryEntity subcategory = resolveSubcategory(category, updateOfferDTO.getSubcategoryId());
 
         // Parsuj współrzędne
         BigDecimal latitude = null;
@@ -1052,9 +1126,11 @@ public class OfferService {
 
         OfferPricing pricing = resolvePricingForUpdate(
                 transactionType, updateOfferDTO.getPrice(), updateOfferDTO.getCurrency(),
-                offer.getPrice(), offer.getCurrency());
+                updateOfferDTO.getOriginalPrice(), Boolean.TRUE.equals(updateOfferDTO.getClearOriginalPrice()),
+                offer.getPrice(), offer.getCurrency(), offer.getOriginalPrice());
         offer.setPrice(pricing.price());
         offer.setCurrency(pricing.currency());
+        offer.setOriginalPrice(pricing.originalPrice());
 
         if (latitude != null && longitude != null) {
             offer.setLatitude(latitude);
@@ -1383,7 +1459,7 @@ public class OfferService {
             tags.put("expiryDate", offer.getExpiryDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Oferta wygasła - GNG";
+            String subject = "Oferta wygasła - Biovlo";
 
             emailSenderService.sendEmail(offer.getUser().getEmail(), subject, filledTemplate, null);
             logger.info("Wysłano powiadomienie o wygaśnięciu oferty {} do użytkownika {}", offer.getId(), offer.getUser().getEmail());
@@ -1513,7 +1589,7 @@ public class OfferService {
             tags.put("offerLink", frontAppUrl + "/offers/" + offer.getId());
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Twoja oferta została zmodyfikowana przez pracownika - GNG";
+            String subject = "Twoja oferta została zmodyfikowana przez pracownika - Biovlo";
 
             emailSenderService.sendEmail(offer.getUser().getEmail(), subject, filledTemplate, null);
             logger.info("Wysłano powiadomienie o modyfikacji oferty {} przez moderatora do użytkownika {}", 

@@ -25,6 +25,10 @@ public class OfferDetailsDTO {
     private String pickupDateTo;
     private BigDecimal price;
     private String currency;
+    /** Cena przed obniżką; null = bez przeceny. */
+    private BigDecimal originalPrice;
+    /** Rabat w % (zaokrąglony HALF_UP) — liczony w backendzie, żeby web i mobile pokazywały to samo. */
+    private Integer discountPercent;
     private BigDecimal latitude;
     private BigDecimal longitude;
     private String location;

@@ -9,6 +9,11 @@ import com.example.gng.geocode.service.GeoCodeService;
 import com.example.gng.image.repository.ImageModelRepository;
 import com.example.gng.mail_template.repository.MailTemplateRepository;
 import com.example.gng.moderation.service.ForbiddenPatternService;
+import com.example.gng.common.exception.BadRequestException;
+import com.example.gng.common.exception.ResourceNotFoundException;
+import com.example.gng.offer.dto.CreateOfferDTO;
+import com.example.gng.offer.entity.CategoryEntity;
+import com.example.gng.offer.entity.SubcategoryEntity;
 import com.example.gng.offer.dto.OfferPreview;
 import com.example.gng.offer.entity.OfferEntity;
 import com.example.gng.offer.entity.OfferStatus;
@@ -36,9 +41,11 @@ import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -130,6 +137,102 @@ class OfferPreviewMappingTest {
         assertEquals(8L, fromPerson.getSellerId());
         assertEquals(UserType.REGULAR, fromPerson.getSellerType());
         assertNull(fromPerson.getStoreName(), "imię i nazwisko osoby prywatnej nie trafia na kafelek");
+    }
+
+    @Test
+    void pickupDateTo_isExposedForTheTile() {
+        OfferEntity withPickup = offer("p", "Chleb", company, OfferStatus.ACTIVE);
+        withPickup.setPickupDateTo("20:00");
+        OfferEntity withoutPickup = offer("q", "Bułki", company, OfferStatus.ACTIVE);
+
+        List<OfferPreview> previews = offerService.toPreviews(List.of(withPickup, withoutPickup));
+
+        assertEquals("20:00", previews.get(0).getPickupDateTo());
+        assertNull(previews.get(1).getPickupDateTo(), "brak okna odbioru — kafelek nie pokazuje godziny");
+    }
+
+    @Test
+    void discount_isExposedWithPercentComputedInBackend() {
+        OfferEntity discounted = offer("d", "Chleb", company, OfferStatus.ACTIVE);
+        discounted.setTransactionType(TransactionType.sale);
+        discounted.setPrice(new BigDecimal("4.50"));
+        discounted.setOriginalPrice(new BigDecimal("7.99"));
+        discounted.setCurrency("PLN");
+        OfferEntity regular = offer("r", "Bułki", company, OfferStatus.ACTIVE);
+        regular.setTransactionType(TransactionType.sale);
+        regular.setPrice(new BigDecimal("2.00"));
+        regular.setCurrency("PLN");
+
+        List<OfferPreview> previews = offerService.toPreviews(List.of(discounted, regular));
+
+        assertEquals(new BigDecimal("7.99"), previews.get(0).getOriginalPrice());
+        assertEquals(44, previews.get(0).getDiscountPercent());
+        assertNull(previews.get(1).getOriginalPrice());
+        assertNull(previews.get(1).getDiscountPercent(), "bez przeceny — bez badge'a");
+    }
+
+    // ---------- podkategoria przy tworzeniu: błędy 6.3 zamiast 500 ----------
+
+    private CreateOfferDTO createRequest(Integer subcategoryId) {
+        sessionServiceStatic.when(SessionService::getCurrentUserEmail).thenReturn("firma@test.pl");
+        when(userRepository.findByEmail("firma@test.pl")).thenReturn(Optional.of(company));
+        when(userRankService.canCreateOffer(company)).thenReturn(true);
+
+        CreateOfferDTO dto = new CreateOfferDTO();
+        dto.setCategoryId(6);
+        dto.setSubcategoryId(subcategoryId);
+        dto.setName("Chleb");
+        dto.setDescription("Opis");
+        dto.setLocation("Kraków");
+        dto.setCoordinates("19.94,50.06");
+        dto.setPickupTimeFrom("09:00");
+        dto.setPickupTimeTo("18:00");
+        dto.setOfferType(TransactionType.free);
+        dto.setExpiryDate(java.time.LocalDate.now().plusDays(2));
+        return dto;
+    }
+
+    private CategoryEntity categoryWithSubcategory(int categoryId, int subcategoryId) {
+        CategoryEntity category = new CategoryEntity();
+        category.setId(categoryId);
+        category.setName("Pieczywo i wypieki");
+        SubcategoryEntity sub = new SubcategoryEntity();
+        sub.setId(subcategoryId);
+        sub.setCategory(category);
+        category.setSubcategories(new java.util.ArrayList<>(List.of(sub)));
+        return category;
+    }
+
+    @Test
+    void createOffer_withoutRequiredSubcategory_is400WithCode() {
+        when(categoryRepository.findById(6)).thenReturn(Optional.of(categoryWithSubcategory(6, 16)));
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> offerService.createOffer(createRequest(null), List.of()));
+
+        assertEquals("SUBCATEGORY_REQUIRED", ex.getCode());
+        assertEquals(6, ex.getDetails().get("categoryId"));
+    }
+
+    @Test
+    void createOffer_subcategoryFromOtherCategory_is400WithCode() {
+        when(categoryRepository.findById(6)).thenReturn(Optional.of(categoryWithSubcategory(6, 16)));
+        CategoryEntity other = categoryWithSubcategory(3, 2);
+        when(subcategoryRepository.findById(2)).thenReturn(Optional.of(other.getSubcategories().get(0)));
+
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> offerService.createOffer(createRequest(2), List.of()));
+        assertEquals("SUBCATEGORY_MISMATCH", ex.getCode());
+    }
+
+    @Test
+    void createOffer_unknownSubcategory_is404WithCode() {
+        when(categoryRepository.findById(6)).thenReturn(Optional.of(categoryWithSubcategory(6, 16)));
+        when(subcategoryRepository.findById(999)).thenReturn(Optional.empty());
+
+        ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class,
+                () -> offerService.createOffer(createRequest(999), List.of()));
+        assertEquals("SUBCATEGORY_NOT_FOUND", ex.getCode());
     }
 
     @Test

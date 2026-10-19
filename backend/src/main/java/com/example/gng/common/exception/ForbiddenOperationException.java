@@ -54,6 +54,13 @@ public class ForbiddenOperationException extends ApiException {
                 Map.of());
     }
 
+    /** Lista rezerwacji sklepu — tylko konto firmowe (obrona w głębi za regułą SecurityConfig). */
+    public static ForbiddenOperationException storeReservationsCompanyOnly() {
+        return new ForbiddenOperationException(
+                "Lista rezerwacji sklepu jest dostępna tylko dla konta firmowego.",
+                Map.of());
+    }
+
     /** Provisioning pracowników jest dostępny wyłącznie dla konta firmowego. */
     public static ForbiddenOperationException notACompanyAccount() {
         return new ForbiddenOperationException(

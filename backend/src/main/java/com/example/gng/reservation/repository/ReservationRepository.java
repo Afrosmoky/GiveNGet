@@ -1,5 +1,6 @@
 package com.example.gng.reservation.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import com.example.gng.reservation.entity.ReservationEntity;
 import com.example.gng.reservation.entity.ReservationStatus;
 import org.springframework.data.domain.Page;
@@ -101,6 +102,39 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
              AND r.expiresAt > :now
            """)
     int countActiveByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
+
+    /**
+     * Rezerwacje na oferty sklepu (panel firmy, docs/08 #8). Zakres po właścicielu oferty —
+     * to jest sprawdzenie własności: firma nie dostanie rezerwacji na cudze oferty.
+     *
+     * <p>Filtr po statusie EFEKTYWNYM (jak w DTO): RESERVED po terminie, którego scheduler
+     * jeszcze nie przestawił, liczy się jako EXPIRED, a nie RESERVED. Bez tego lista „aktywne”
+     * pokazywałaby rezerwacje, które klient już stracił. {@code status = null} → wszystkie.
+     *
+     * <p>Oferta i klient dociągane jednym zapytaniem (nazwa oferty i imię klienta są w DTO).
+     */
+    @EntityGraph(attributePaths = {"offer", "user"})
+    @Query("""
+           SELECT r FROM ReservationEntity r
+           WHERE r.offer.user.id = :storeId
+             AND (
+                   :status IS NULL
+                   OR (:status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+                       AND r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+                       AND r.expiresAt > :now)
+                   OR (:status = com.example.gng.reservation.entity.ReservationStatus.EXPIRED
+                       AND (r.status = com.example.gng.reservation.entity.ReservationStatus.EXPIRED
+                            OR (r.status = com.example.gng.reservation.entity.ReservationStatus.RESERVED
+                                AND r.expiresAt <= :now)))
+                   OR (:status IN (com.example.gng.reservation.entity.ReservationStatus.COLLECTED,
+                                   com.example.gng.reservation.entity.ReservationStatus.CANCELLED)
+                       AND r.status = :status)
+                 )
+           """)
+    Page<ReservationEntity> findForStore(@Param("storeId") Long storeId,
+                                         @Param("status") ReservationStatus status,
+                                         @Param("now") LocalDateTime now,
+                                         Pageable pageable);
 
     /** Rezerwacje do wygaszenia przez scheduler: wciąż RESERVED, ale termin minął. */
     List<ReservationEntity> findByStatusAndExpiresAtLessThanEqual(ReservationStatus status, LocalDateTime now);

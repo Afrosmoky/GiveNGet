@@ -14,6 +14,24 @@ public class BadRequestException extends ApiException {
         super(code, HttpStatus.BAD_REQUEST, message, details);
     }
 
+    /** Nieznana wartość filtra statusu rezerwacji (np. ?status=FOO). */
+    public static BadRequestException invalidReservationStatus(String value) {
+        return new BadRequestException(
+                "INVALID_RESERVATION_STATUS",
+                "Nieznany status rezerwacji.",
+                Map.of("status", value,
+                        "allowed", java.util.Arrays.stream(com.example.gng.reservation.entity.ReservationStatus.values())
+                                .map(Enum::name).toList()));
+    }
+
+    /** Link resetu hasła nieważny: kod nie istnieje, został już użyty albo wygasł (3 dni). */
+    public static BadRequestException invalidResetCode() {
+        return new BadRequestException(
+                "INVALID_RESET_CODE",
+                "Link do zmiany hasła jest nieprawidłowy, wygasł albo został już użyty.",
+                null);
+    }
+
     public static BadRequestException invalidDateRange(Object from, Object to) {
         return new BadRequestException(
                 "INVALID_DATE_RANGE",

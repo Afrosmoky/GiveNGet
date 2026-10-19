@@ -2,6 +2,7 @@ package com.example.gng.user.service;
 
 import com.example.gng.auth.service.SessionService;
 import org.springframework.cache.annotation.CacheEvict;
+import com.example.gng.common.exception.BadRequestException;
 import com.example.gng.email.service.EmailSenderService;
 import com.example.gng.exceptions.InvalidRequestException;
 import com.example.gng.exceptions.TooManyTagsException;
@@ -522,15 +523,31 @@ public class UserService {
         return tags;
     }
 
-    public void resetPassword(String code, String password) {
-        resetPasswordCodeModelRepository.findByCodeAndUsedFalseAndAddedAfter(code, LocalDateTime.now().minusDays(3))
-                .ifPresent(resetPasswordCodeModel -> {
+    /**
+     * Ustawia nowe hasło na podstawie kodu z maila.
+     *
+     * <p>{@code UserRepository.findByEmail} jest cache'owane po e-mailu (bez TTL), a logowanie
+     * czyta użytkownika właśnie stamtąd. Bez zdjęcia wpisu z cache po resecie działałoby dalej
+     * STARE hasło, a nowe nie — aż do restartu. Stąd zwracany e-mail i eviction jak w verifyUser.
+     *
+     * <p>Kod nieistniejący, zużyty albo starszy niż 3 dni kończy się 400 INVALID_RESET_CODE —
+     * wcześniej endpoint zwracał wtedy 200 i nic nie robił, a front pokazywał „Hasło zmienione”.
+     *
+     * @return e-mail użytkownika, któremu zmieniono hasło
+     * @throws BadRequestException INVALID_RESET_CODE, gdy kod jest nieważny
+     */
+    @CacheEvict(value = "users", key = "#result", condition = "#result != null")
+    public String resetPassword(String code, String password) {
+        return resetPasswordCodeModelRepository.findByCodeAndUsedFalseAndAddedAfter(code, LocalDateTime.now().minusDays(3))
+                .map(resetPasswordCodeModel -> {
                     resetPasswordCodeModel.setUsed(true);
                     UserModel user = resetPasswordCodeModel.getUser();
                     user.setPassword(passwordEncoder.encode(password));
                     userRepository.save(user);
                     resetPasswordCodeModelRepository.delete(resetPasswordCodeModel);
-                });
+                    return user.getEmail();
+                })
+                .orElseThrow(BadRequestException::invalidResetCode);
     }
 
     public void updateUserInfo(UpdateUserInfoDTO updateUserInfo) {
@@ -588,7 +605,7 @@ public class UserService {
             if (passwordEncoder.matches(changeEmailDto.currentPassword(), currentPasswordFromDb)) {
                 userModel.setEmail(changeEmailDto.newEmail());
                 userRepository.save(userModel);
-                log.info("Email użytkownika {} został zmieniony na: {}", currentPasswordFromDb, userModel.getEmail());
+                log.info("Email użytkownika {} został zmieniony na: {}", currentUserEmail, userModel.getEmail());
                 sendChangeEmailNotificationEmail(userModel, currentUserEmail);
             } else {
                 throw new WrongPasswordException();
@@ -619,7 +636,7 @@ public class UserService {
             tags.put("changeDate", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
 
             String filledTemplate = TemplateProcessor.processTemplate(template.getTemplate(), tags);
-            String subject = "Zmiana adresu email - GNG";
+            String subject = "Zmiana adresu email - Biovlo";
 
             emailSenderService.sendEmail(oldEmail, subject, filledTemplate, null);
             log.info("Wysłano powiadomienie o zmianie emaila na stary adres: {}", oldEmail);

@@ -42,6 +42,10 @@ public class OfferEntity {
 
     private BigDecimal price;
 
+    /** Cena przed obniżką; null = oferta bez przeceny. Reguły w OfferService (tylko sprzedaż, > price). */
+    @Column(name = "original_price")
+    private BigDecimal originalPrice;
+
     private String currency;
 
     private BigDecimal latitude;

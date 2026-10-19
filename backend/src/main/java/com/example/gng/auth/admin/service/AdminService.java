@@ -189,7 +189,7 @@ public class AdminService {
             }
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = banned ? "Konto odblokowane - GNG" : "Konto zablokowane - GNG";
+            String subject = banned ? "Konto odblokowane - Biovlo" : "Konto zablokowane - Biovlo";
 
             emailSenderService.sendEmail(user.getEmail(), subject, filledTemplate, null);
 
@@ -313,7 +313,7 @@ public class AdminService {
             tags.put("reason", reason != null ? reason : "Brak podanego powodu");
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Oferta usunięta - GNG";
+            String subject = "Oferta usunięta - Biovlo";
 
             emailSenderService.sendEmail(user.getEmail(), subject, filledTemplate, null);
 
@@ -355,7 +355,7 @@ public class AdminService {
             tags.put("reason", reason != null ? reason : "Brak podanego powodu");
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Oferta zablokowana - GNG";
+            String subject = "Oferta zablokowana - Biovlo";
 
             emailSenderService.sendEmail(user.getEmail(), subject, filledTemplate, null);
 

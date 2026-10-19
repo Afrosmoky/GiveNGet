@@ -80,6 +80,9 @@ public class SecurityConfig {
                         // /api/v1/reservations, więc nie przechwytuje tej głębszej ścieżki.
                         .requestMatchers(HttpMethod.POST, "/api/v1/reservations/collect")
                                 .hasAnyRole("STORE_EMPLOYEE", "ADMIN")
+                        // Rezerwacje na oferty sklepu (panel firmy) — tylko konto firmowe. Zakres
+                        // (wyłącznie własne oferty) wyznacza dodatkowo ReservationService.listForStore.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reservations/for-store").hasRole("COMPANY")
                         // Pracownicy sklepu (zakładanie, lista, dezaktywacja) — tylko konto firmowe.
                         // ADMIN nie ma firmy, więc nie byłoby czym powiązać pracowników. Zakres
                         // danych (wyłącznie własny sklep) pilnuje dodatkowo StoreEmployeeService.

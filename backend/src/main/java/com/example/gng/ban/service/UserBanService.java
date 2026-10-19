@@ -167,7 +167,7 @@ public class UserBanService {
             }
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Konto zablokowane - GNG";
+            String subject = "Konto zablokowane - Biovlo";
 
             emailSenderService.sendEmail(user.getEmail(), subject, filledTemplate, null);
 
@@ -191,7 +191,7 @@ public class UserBanService {
             tags.put("note", "Pamiętaj o przestrzeganiu regulaminu platformy.");
 
             String filledTemplate = TemplateProcessor.processTemplate(emailTemplate.getTemplate(), tags);
-            String subject = "Konto odblokowane - GNG";
+            String subject = "Konto odblokowane - Biovlo";
 
             emailSenderService.sendEmail(user.getEmail(), subject, filledTemplate, null);
 

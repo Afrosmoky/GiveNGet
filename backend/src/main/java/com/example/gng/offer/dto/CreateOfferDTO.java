@@ -61,6 +61,13 @@ public class CreateOfferDTO {
     @Digits(integer = 8, fraction = 2, message = "Cena może mieć najwyżej 2 miejsca po przecinku")
     private BigDecimal price;
 
+    /**
+     * Cena przed obniżką — opcjonalna, tylko dla sprzedaży, musi być wyższa od price.
+     * Reguły egzekwuje OfferService (ORIGINAL_PRICE_NOT_ALLOWED / INVALID_ORIGINAL_PRICE / ORIGINAL_PRICE_NOT_HIGHER).
+     */
+    @Digits(integer = 8, fraction = 2, message = "Cena przed obniżką może mieć najwyżej 2 miejsca po przecinku")
+    private BigDecimal originalPrice;
+
     /** Waluta ceny (ISO 4217). Brak wartości przy sprzedaży oznacza PLN. */
     @Pattern(regexp = "^[A-Za-z]{3}$", message = "Waluta musi być trzyliterowym kodem ISO 4217")
     private String currency;

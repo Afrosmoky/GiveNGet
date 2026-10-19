@@ -4,6 +4,7 @@ import com.example.gng.auth.service.SessionService;
 import com.example.gng.favorites.entity.FavoriteOfferEntity;
 import com.example.gng.favorites.repository.FavoriteOfferRepository;
 import com.example.gng.offer.dto.OfferPreview;
+import com.example.gng.offer.service.OfferPreviewSupport;
 import com.example.gng.offer.entity.OfferEntity;
 import com.example.gng.offer.repository.OfferRepository;
 import com.example.gng.image.model.ImageEntity;
@@ -186,14 +187,16 @@ public class FavoriteOfferService {
         preview.setIsFavorite(true);
         preview.setStatus(offer.getStatus());
 
-        // Cena i waluta (null dla ofert darmowych i wymian)
-        preview.setPrice(offer.getPrice());
-        preview.setCurrency(offer.getCurrency());
+        // Cena, waluta, przecena i sprzedawca — ten sam kod co kafelki z OfferService,
+        // żeby badge sklepu i „−NN%” działały też w ulubionych
+        OfferPreviewSupport.applyPricing(preview, offer);
+        OfferPreviewSupport.applySeller(preview, offer.getUser());
 
         // Liczba sztuk i dostępność (quantity minus sztuki zajęte rezerwacjami)
         int total = offer.getQuantity() != null ? offer.getQuantity() : 0;
         preview.setQuantity(offer.getQuantity());
         preview.setAvailableQuantity(Math.max(0, total - reservedByOffer.getOrDefault(offer.getId(), 0)));
+        preview.setPickupDateTo(offer.getPickupDateTo());
 
         // Ustaw lokalizację na podstawie współrzędnych
         if (offer.getLatitude() != null && offer.getLongitude() != null) {

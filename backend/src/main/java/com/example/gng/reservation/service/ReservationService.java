@@ -21,6 +21,8 @@ import com.example.gng.register.repository.UserRepository;
 import com.example.gng.store.entity.StoreEmployeeModel;
 import com.example.gng.reservation.dto.CreateReservationRequest;
 import com.example.gng.reservation.dto.ReservationDTO;
+import com.example.gng.common.exception.BadRequestException;
+import com.example.gng.reservation.dto.StoreReservationDTO;
 import com.example.gng.reservation.entity.ReservationEntity;
 import com.example.gng.reservation.entity.ReservationStatus;
 import com.example.gng.reservation.repository.ReservationRepository;
@@ -65,6 +67,14 @@ public class ReservationService {
     private static final Sort LIST_SORT = Sort.by(
             Sort.Order.desc("createdAt"),
             Sort.Order.asc("id"));
+
+    /**
+     * Lista sklepu: najnowsze na górze, id malejąco jako tie-breaker — import i seryjne
+     * rezerwacje dają identyczne createdAt, a bez drugiego klucza paginacja gubi rekordy.
+     */
+    private static final Sort STORE_LIST_SORT = Sort.by(
+            Sort.Order.desc("createdAt"),
+            Sort.Order.desc("id"));
 
     private final ReservationRepository reservationRepository;
     private final OfferRepository offerRepository;
@@ -195,6 +205,60 @@ public class ReservationService {
         Page<ReservationEntity> reservations = reservationRepository.findByUserId(user.getId(), pageable);
 
         return PageResponse.from(reservations, reservation -> toDto(reservation, now));
+    }
+
+    /**
+     * Rezerwacje na oferty sklepu wywołującego (panel firmy, docs/08 #8).
+     *
+     * <p>Rola COMPANY to pierwsza bramka (SecurityConfig); tu sprawdzamy ją ponownie, a zakres
+     * danych wyznacza właściciel oferty w zapytaniu — firma nigdy nie zobaczy rezerwacji na
+     * cudze oferty, niezależnie od parametrów.
+     *
+     * @param rawStatus opcjonalny filtr (RESERVED/COLLECTED/EXPIRED/CANCELLED, wielkość liter
+     *                  bez znaczenia); nieznana wartość → 400 INVALID_RESERVATION_STATUS
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<StoreReservationDTO> listForStore(String currentUserEmail, String rawStatus,
+                                                          Integer page, Integer size) {
+        UserModel caller = requireUser(currentUserEmail);
+        if (caller.getType() != UserType.COMPANY) {
+            throw ForbiddenOperationException.storeReservationsCompanyOnly();
+        }
+        ReservationStatus status = parseStatusFilter(rawStatus);
+        LocalDateTime now = nowUtc();
+
+        Pageable pageable = PageParams.of(page, size, STORE_LIST_SORT);
+        Page<ReservationEntity> reservations = reservationRepository.findForStore(caller.getId(), status, now, pageable);
+
+        return PageResponse.from(reservations, reservation -> toStoreDto(reservation, now));
+    }
+
+    private static ReservationStatus parseStatusFilter(String rawStatus) {
+        if (rawStatus == null || rawStatus.isBlank()) {
+            return null;
+        }
+        try {
+            return ReservationStatus.valueOf(rawStatus.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw BadRequestException.invalidReservationStatus(rawStatus);
+        }
+    }
+
+    StoreReservationDTO toStoreDto(ReservationEntity reservation, LocalDateTime now) {
+        OfferEntity offer = reservation.getOffer();
+        UserModel customer = reservation.getUser();
+        return new StoreReservationDTO(
+                reservation.getId(),
+                reservation.effectiveStatus(now),
+                reservation.getQuantity(),
+                offer != null ? offer.getId() : null,
+                offer != null ? offer.getName() : null,
+                firstImageUrl(offer),
+                customer != null ? customer.getFirstName() : null,
+                reservation.getCreatedAt(),
+                reservation.getExpiresAt(),
+                reservation.getCollectedAt(),
+                reservation.getCancelledAt());
     }
 
     /**

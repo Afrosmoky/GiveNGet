@@ -158,7 +158,7 @@ public class DashboardStatisticsService {
         Long messageCount = messageStatisticsRepository.countByRecipientId(userId);
         activitySummary.put("messagesFromUsers", messageCount != null ? messageCount : 0L);
         
-        // Liczba wyświetleń profilu i ogłoszeń
+        // Liczba wyświetleń profilu i ofert
         Long profileViews = offerStatisticsRepository.countByUserIdAndEventType(userId, OfferStatisticsEntity.EventType.PROFILE_VIEW);
         Long offerViews = offerStatisticsRepository.countByUserIdAndEventType(userId, OfferStatisticsEntity.EventType.VIEW);
         Long totalViews = (profileViews != null ? profileViews : 0L) + (offerViews != null ? offerViews : 0L);

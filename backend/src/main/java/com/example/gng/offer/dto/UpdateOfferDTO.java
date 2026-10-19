@@ -63,6 +63,17 @@ public class UpdateOfferDTO {
     @Digits(integer = 8, fraction = 2, message = "Cena może mieć najwyżej 2 miejsca po przecinku")
     private BigDecimal price;
 
+    /**
+     * Cena przed obniżką. Brak pola = bez zmian (jak price) — klient, który nie zna tego pola,
+     * nie skasuje przeceny przy edycji. Usunięcie przeceny: clearOriginalPrice=true.
+     * Zmiana typu na darmowy/wymianę czyści ją zawsze.
+     */
+    @Digits(integer = 8, fraction = 2, message = "Cena przed obniżką może mieć najwyżej 2 miejsca po przecinku")
+    private BigDecimal originalPrice;
+
+    /** Jawne usunięcie ceny przed obniżką. Nie łączyć z originalPrice. */
+    private Boolean clearOriginalPrice;
+
     /** Waluta ceny (ISO 4217); brak pola = bez zmian. */
     @Pattern(regexp = "^[A-Za-z]{3}$", message = "Waluta musi być trzyliterowym kodem ISO 4217")
     private String currency;

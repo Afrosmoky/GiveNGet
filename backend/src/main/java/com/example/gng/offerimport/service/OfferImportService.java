@@ -266,8 +266,11 @@ public class OfferImportService {
         }
 
         int quantity = parseQuantity(row.get(Column.ILOSC));
+        // Reguły ceny i przeceny (tylko sprzedaż, wyższa od ceny) — te same co w formularzu;
+        // BadRequestException z OfferService trafia do raportu jako błąd tego wiersza
         OfferService.OfferPricing pricing = OfferService.resolvePricingForCreate(
-                type, parsePrice(row.get(Column.CENA)), row.get(Column.WALUTA));
+                type, parsePrice(row.get(Column.CENA)), row.get(Column.WALUTA),
+                parseOriginalPrice(row.get(Column.CENA_PRZED_OBNIZKA)));
 
         OfferEntity offer = new OfferEntity();
         offer.setName(name);
@@ -281,6 +284,7 @@ public class OfferImportService {
         offer.setQuantity(quantity);
         offer.setPrice(pricing.price());
         offer.setCurrency(pricing.currency());
+        offer.setOriginalPrice(pricing.originalPrice());
         offer.setUser(company);
         applyLocation(offer, row, company);
         return offer;
@@ -370,6 +374,19 @@ public class OfferImportService {
         } catch (NumberFormatException e) {
             throw new RowValidationException("INVALID_PRICE",
                     "Nieprawidłowa cena „" + raw + "”. Podaj liczbę, np. 4.99.");
+        }
+    }
+
+    /** Brak wartości = oferta bez przeceny. Reguły (sprzedaż, > cena) rozstrzyga OfferService. */
+    private static BigDecimal parseOriginalPrice(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return new BigDecimal(raw.replace(',', '.'));
+        } catch (NumberFormatException e) {
+            throw new RowValidationException("INVALID_ORIGINAL_PRICE",
+                    "Nieprawidłowa cena przed obniżką „" + raw + "”. Podaj liczbę, np. 7.99.");
         }
     }
 

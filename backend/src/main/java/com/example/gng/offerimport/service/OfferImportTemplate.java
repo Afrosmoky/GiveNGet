@@ -39,6 +39,8 @@ public final class OfferImportTemplate {
         OPIS("opis", true, "Opis oferty"),
         TYP_TRANSAKCJI("typ_transakcji", true, "sprzedaz / za_darmo / wymiana"),
         CENA("cena", false, "Cena za sztukę — wymagana tylko dla sprzedaży, np. 4.99"),
+        CENA_PRZED_OBNIZKA("cena_przed_obnizka", false,
+                "Cena przed obniżką — opcjonalna, tylko dla sprzedaży, wyższa od ceny, np. 7.99"),
         WALUTA("waluta", false, "PLN / EUR / GBP — tylko dla sprzedaży, domyślnie PLN"),
         ILOSC("ilosc", false, "Liczba sztuk (liczba całkowita ≥ 0), domyślnie 1"),
         TERMIN_WAZNOSCI("termin_waznosci", true, "Data w formacie RRRR-MM-DD, nie wcześniejsza niż dziś"),
@@ -100,11 +102,11 @@ public final class OfferImportTemplate {
             }
             // Daty i godziny jako tekst — komórka typu data w Excelu formatuje się
             // według ustawień regionalnych i użytkownik widziałby inny format niż wymagany
-            addExample(data, 1, "Chleb żytni", "Pieczywo z dzisiejszego wypieku", "sprzedaz", 4.99, "PLN", 10,
+            addExample(data, 1, "Chleb żytni", "Pieczywo z dzisiejszego wypieku", "sprzedaz", 4.99, 7.99, "PLN", 10,
                     today.plusDays(2), "16:00", "19:00", "Pieczywo i wypieki", "Pieczywo i bułki");
-            addExample(data, 2, "Jabłka", "Lekko obite, idealne do szarlotki", "za_darmo", null, null, 5,
+            addExample(data, 2, "Jabłka", "Lekko obite, idealne do szarlotki", "za_darmo", null, null, null, 5,
                     today.plusDays(3), "09:00", "18:00", "Owoce i warzywa", "Świeże owoce");
-            addExample(data, 3, "Ser gouda 150 g", "Zamienię na pieczywo", "wymiana", null, null, 2,
+            addExample(data, 3, "Ser gouda 150 g", "Zamienię na pieczywo", "wymiana", null, null, null, 2,
                     today.plusDays(5), "10:00", "17:00", "Nabiał i alternatywy", "Sery");
             for (int i = 0; i < columns.length; i++) {
                 data.setColumnWidth(i, 22 * 256);
@@ -183,7 +185,7 @@ public final class OfferImportTemplate {
     }
 
     private static void addExample(Sheet sheet, int rowIndex, String name, String description, String type,
-                                   Double price, String currency, int quantity, LocalDate expiry,
+                                   Double price, Double originalPrice, String currency, int quantity, LocalDate expiry,
                                    String from, String to, String category, String subcategory) {
         Row row = sheet.createRow(rowIndex);
         row.createCell(Column.NAZWA.ordinal()).setCellValue(name);
@@ -191,6 +193,9 @@ public final class OfferImportTemplate {
         row.createCell(Column.TYP_TRANSAKCJI.ordinal()).setCellValue(type);
         if (price != null) {
             row.createCell(Column.CENA.ordinal()).setCellValue(price);
+        }
+        if (originalPrice != null) {
+            row.createCell(Column.CENA_PRZED_OBNIZKA.ordinal()).setCellValue(originalPrice);
         }
         if (currency != null) {
             row.createCell(Column.WALUTA.ordinal()).setCellValue(currency);

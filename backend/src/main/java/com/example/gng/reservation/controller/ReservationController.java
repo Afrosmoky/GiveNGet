@@ -4,6 +4,7 @@ import com.example.gng.common.dto.PageResponse;
 import com.example.gng.reservation.dto.CollectReservationRequest;
 import com.example.gng.reservation.dto.CreateReservationRequest;
 import com.example.gng.reservation.dto.ReservationDTO;
+import com.example.gng.reservation.dto.StoreReservationDTO;
 import com.example.gng.reservation.service.ReservationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,22 @@ public class ReservationController {
             @RequestParam(value = "size", required = false) Integer size) {
 
         return ResponseEntity.ok(reservationService.listForCurrentUser(authentication.getName(), page, size));
+    }
+
+    /**
+     * Rezerwacje na oferty sklepu zalogowanej firmy (docs/08 #8). Dostęp: ROLE_COMPANY.
+     * Paginacja jak w innych listach /api/v1, sort createdAt desc, id desc. Bez kodów odbioru.
+     *
+     * @param status opcjonalny filtr statusu efektywnego; zła wartość → 400 INVALID_RESERVATION_STATUS
+     */
+    @GetMapping("/for-store")
+    public ResponseEntity<PageResponse<StoreReservationDTO>> listForStore(
+            Authentication authentication,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "size", required = false) Integer size) {
+
+        return ResponseEntity.ok(reservationService.listForStore(authentication.getName(), status, page, size));
     }
 
     /** Szczegóły własnej rezerwacji. */

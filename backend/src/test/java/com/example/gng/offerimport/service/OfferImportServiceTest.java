@@ -328,6 +328,40 @@ class OfferImportServiceTest {
         assertEquals("EUR", saved.getCurrency());
     }
 
+    @Test
+    void originalPrice_isValidatedPerRowWithOfferServiceRules() throws IOException {
+        byte[] xlsx;
+        try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet();
+            String[] headers = Arrays.copyOf(HEADERS, HEADERS.length + 1);
+            headers[HEADERS.length] = "cena_przed_obnizka";
+            writeRow(sheet, 0, headers);
+            String b = "Pieczywo i wypieki", sb = "Pieczywo i bułki";
+            writeRow(sheet, 1, "Przecena OK", "Opis", "sprzedaz", "4.50", "", "1", FUTURE, "09:00", "10:00", b, sb, "7,99");
+            writeRow(sheet, 2, "Równa cenie", "Opis", "sprzedaz", "4.50", "", "1", FUTURE, "09:00", "10:00", b, sb, "4.50");
+            writeRow(sheet, 3, "Niższa od ceny", "Opis", "sprzedaz", "4.50", "", "1", FUTURE, "09:00", "10:00", b, sb, "3");
+            writeRow(sheet, 4, "Darmowa z przeceną", "Opis", "za_darmo", "", "", "1", FUTURE, "09:00", "10:00", b, sb, "5");
+            writeRow(sheet, 5, "Tekst", "Opis", "sprzedaz", "4.50", "", "1", FUTURE, "09:00", "10:00", b, sb, "dużo");
+            writeRow(sheet, 6, "Bez przeceny", "Opis", "sprzedaz", "4.50", "", "1", FUTURE, "09:00", "10:00", b, sb, "");
+            wb.write(out);
+            xlsx = out.toByteArray();
+        }
+
+        OfferImportResult result = service.importOffers(COMPANY_EMAIL, xlsx("oferty.xlsx", xlsx));
+
+        assertEquals(List.of(
+                new Err(3, "ORIGINAL_PRICE_NOT_HIGHER"),
+                new Err(4, "ORIGINAL_PRICE_NOT_HIGHER"),
+                new Err(5, "ORIGINAL_PRICE_NOT_ALLOWED"),
+                new Err(6, "INVALID_ORIGINAL_PRICE")
+        ), errors(result));
+
+        List<OfferEntity> saved = captureSaved();
+        assertEquals(2, saved.size());
+        assertEquals(new BigDecimal("7.99"), saved.get(0).getOriginalPrice(), "polski przecinek dziesiętny");
+        assertNull(saved.get(1).getOriginalPrice(), "pusta komórka = bez przeceny");
+    }
+
     // ------------------------------------------------------------------
     // Plik
     // ------------------------------------------------------------------

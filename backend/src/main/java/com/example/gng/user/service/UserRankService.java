@@ -183,9 +183,9 @@ public class UserRankService {
     private String getRankBenefits(UserRank rank) {
         switch (rank) {
             case STARTER:
-                return "• 5 darmowych ogłoszeń";
+                return "• 5 darmowych ofert";
             case RELIABLE_SELLER:
-                return "• Większa widoczność ogłoszeń<br>• +5 darmowych ogłoszeń";
+                return "• Większa widoczność ofert<br>• +5 darmowych ofert";
             case TRUSTED_PARTNER:
                 return "• Odznaka profilu<br>• Promowane miejsce w wynikach<br>• Zniżka 20% na boosty";
             case LOCAL_HERO:

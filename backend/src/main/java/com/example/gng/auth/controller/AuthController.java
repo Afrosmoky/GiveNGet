@@ -4,6 +4,7 @@ import com.example.gng.auth.dto.LoginRequest;
 import com.example.gng.auth.dto.LoginResponse;
 import com.example.gng.auth.service.CustomUserDetailsService;
 import com.example.gng.auth.service.JwtService;
+import com.example.gng.common.dto.ApiErrorResponse;
 import com.example.gng.common.exception.TooManyRequestsException;
 import com.example.gng.common.ratelimit.ClientIpResolver;
 import com.example.gng.common.ratelimit.RateLimitProperties;
@@ -29,6 +30,9 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -107,23 +111,7 @@ public class AuthController {
             // Sprawdź czy użytkownik ma aktywny ban
             java.util.Optional<UserBanEntity> activeBan = userBanService.getActiveBan(user.getId());
             if (activeBan.isPresent()) {
-                UserBanEntity ban = activeBan.get();
-                String banMessage = "Twoje konto zostało zablokowane";
-                if (ban.getEndDate() != null) {
-                    banMessage += " do " + ban.getEndDate().toString();
-                } else {
-                    banMessage += " permanentnie";
-                }
-                
-                // Wyświetl powód bana - użyj opisu z enum, a jeśli OTHER to użyj reason
-                BanReason reasonCode = ban.getReasonCode();
-                String reasonText = reasonCode != null ? reasonCode.getDescription() : "Nieznany powód";
-                if (reasonCode == BanReason.OTHER && ban.getReason() != null && !ban.getReason().isEmpty()) {
-                    reasonText = ban.getReason();
-                }
-                banMessage += ". Powód: " + reasonText;
-                
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(banMessage);
+                return banResponse(activeBan.get());
             }
 
             String jwt = jwtService.generateToken(userDetails);
@@ -160,18 +148,56 @@ public class AuthController {
             return ResponseEntity.ok(response);
 
         } catch (BadCredentialsException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body("Bad credentials");
+            return error(HttpStatus.BAD_REQUEST, "INVALID_CREDENTIALS",
+                    "Niepoprawny e-mail lub hasło.", null);
         }
         catch (DisabledException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("User not confirmed");
+            return error(HttpStatus.UNAUTHORIZED, "ACCOUNT_NOT_CONFIRMED",
+                    "Konto nie zostało jeszcze aktywowane.", null);
         }
         catch (Exception e) {
             log.error(e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Błąd serwera podczas logowania");
+            return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
+                    "Błąd serwera podczas logowania.", null);
         }
+    }
+
+    /**
+     * Konto z aktywnym banem. Treść komunikatu jak dotąd (data końca albo „permanentnie” + powód),
+     * a {@code details} niesie to samo w postaci maszynowej: {@code until} (ISO, brak = ban
+     * permanentny) i {@code reason}.
+     */
+    private ResponseEntity<ApiErrorResponse> banResponse(UserBanEntity ban) {
+        String banMessage = "Twoje konto zostało zablokowane";
+        if (ban.getEndDate() != null) {
+            banMessage += " do " + ban.getEndDate().toString();
+        } else {
+            banMessage += " permanentnie";
+        }
+
+        // Wyświetl powód bana - użyj opisu z enum, a jeśli OTHER to użyj reason
+        BanReason reasonCode = ban.getReasonCode();
+        String reasonText = reasonCode != null ? reasonCode.getDescription() : "Nieznany powód";
+        if (reasonCode == BanReason.OTHER && ban.getReason() != null && !ban.getReason().isEmpty()) {
+            reasonText = ban.getReason();
+        }
+        banMessage += ". Powód: " + reasonText;
+
+        Map<String, Object> details = new HashMap<>();
+        if (ban.getEndDate() != null) {
+            details.put("until", ban.getEndDate().toString());
+        }
+        details.put("reason", reasonText);
+        return error(HttpStatus.FORBIDDEN, "ACCOUNT_BANNED", banMessage, details);
+    }
+
+    /**
+     * Błędy logowania w formacie 6.3 ({code, message, details}). Statusy HTTP są te same co
+     * wcześniej (400 / 401 / 403 / 500), więc klient rozgałęziający się po statusie działa dalej.
+     */
+    private static ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message,
+                                                          Map<String, Object> details) {
+        return ResponseEntity.status(status).body(ApiErrorResponse.of(code, message, details));
     }
 
     @GetMapping("/validate")

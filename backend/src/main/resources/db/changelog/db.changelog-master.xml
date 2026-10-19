@@ -220,4 +220,16 @@
         <sqlFile path="db/52-store-employee-active.sql" splitStatements="true" endDelimiter=";"/>
     </changeSet>
 
+    <changeSet id="53-add-offer-original-price" author="piotr.szulc">
+        <sqlFile path="db/53-add-offer-original-price.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="54-rebrand-mail-templates" author="piotr.szulc">
+        <sqlFile path="db/54-rebrand-mail-templates.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
+    <changeSet id="55-static-content-about-help" author="piotr.szulc">
+        <sqlFile path="db/55-static-content-about-help.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
 </databaseChangeLog>

@@ -27,7 +27,9 @@ public class FcmTokenService {
             fcmToken.setToken(token);
             fcmToken.setDeviceName(deviceName);
         } else {
-            // Update existing token
+            // Token identyfikuje urządzenie, nie konto — po zalogowaniu innego użytkownika
+            // na tym samym urządzeniu przepinamy go, inaczej push trafiałby do poprzedniego konta
+            fcmToken.setUser(user);
             fcmToken.setToken(token);
             fcmToken.setDeviceName(deviceName);
         }

@@ -17,6 +17,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Data;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,6 +47,8 @@ public class UserModel {
     private String phoneNumber;
 
     @Column(name = "password", nullable = false)
+    // Hash hasła nie trafia do logów (toString encji bywa logowany razem z obiektem)
+    @ToString.Exclude
     private String password;
 
     @Column(name = "address")

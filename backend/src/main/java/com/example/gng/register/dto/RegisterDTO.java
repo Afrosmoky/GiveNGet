@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 
@@ -35,6 +36,8 @@ public class RegisterDTO {
 
     @NotBlank(message = "Hasło jest wymagane")
     @Size(min = 6, message = "Hasło musi mieć co najmniej 6 znaków")
+    // Hasło nigdy nie trafia do logów — toString() (używany m.in. przez logi DEBUG Springa) je pomija
+    @ToString.Exclude
     private String password;
 
     /**
