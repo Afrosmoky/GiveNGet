@@ -3,13 +3,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { environment } from "../../config";
 import { authorizedFetch } from "../../utils/auth";
-import OfferTileSection from "../../components/OfferTileSection";
-import { OfferTileProps, ApiOffer, OfferStatus, STATUS_LABELS } from "../../types/offer";
+import OfferTile from "../../components/OfferTile";
+import { OfferTileSkeleton } from "../../components/offer/OfferTileSkeleton";
+import { OfferListRow } from "../../components/offer/OfferListRow";
+import { OfferTileProps, ApiOffer } from "../../types/offer";
 import { AuthGuard } from "../../components/AuthGuard";
-import { FaListUl, FaTableCells, FaHeart, FaEye } from "react-icons/fa6";
-import Link from "next/link";
-import Image from "next/image";
-import { getImageUrl } from "../../utils/imageUtils";
+import { LuCircleAlert, LuEye, LuHeart, LuLayoutGrid, LuList, LuSlidersHorizontal } from "react-icons/lu";
+import { Alert, Button, Card, CardHeader, Chip, Dialog, IconButton, PageHeader, cn, pageContainer } from "../../components/ui";
+
+const OFFER_GRID = "grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4";
 
 import { Category } from '../../types/offer';
 
@@ -149,20 +151,6 @@ function FavoritesPageContent() {
       fetchFavoriteCategories();
     }
   }, [categories, activeTab, fetchFavoriteCategories]);
-
-  // Funkcja do uzyskiwania kolorów dla statusu
-  const getStatusColors = (status?: OfferStatus) => {
-    switch (status) {
-      case 'ACTIVE':
-        return 'bg-green-100 text-green-800';
-      case 'INACTIVE':
-        return 'bg-gray-100 text-gray-800';
-      case 'PENDING_VERIFICATION':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   // Funkcje do zarządzania obserwowanymi kategoriami
   const handleCategoryToggle = (categoryId: number) => {
@@ -505,594 +493,244 @@ function FavoritesPageContent() {
     }
   }, [activeTab]);
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          minHeight: "calc(100vh - 160px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#f7fafc",
-          padding: "20px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "white",
-            borderRadius: "16px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            padding: "40px",
-            textAlign: "center",
-            maxWidth: "500px",
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #e2e8f0",
-              borderTop: "4px solid #fbbf24",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-              margin: "0 auto 20px",
-            }}
-          />
-          <h2
-            style={{
-              fontSize: "24px",
-              color: "#2d3748",
-              marginBottom: "8px",
-            }}
-          >
-            Ładowanie ulubionych...
-          </h2>
-          <p
-            style={{
-              color: "#4a5568",
-              fontSize: "16px",
-            }}
-          >
-            Pobieramy Twoje ulubione oferty
-          </p>
-        </div>
+  // Oferty z obserwowanych kategorii po filtrach (bez filtrów — wszystkie)
+  const filteredWatchedOffers = watchedOffers.filter((offer) => {
+    if (categoryFilters.categoryIds.length === 0 && categoryFilters.subcategoryIds.length === 0) {
+      return true;
+    }
+    const matchesCategory = categoryFilters.categoryIds.includes(offer.categoryId || 0);
+    const matchesSubcategory = categoryFilters.subcategoryIds.includes(offer.subcategoryId || 0);
+    return matchesCategory || matchesSubcategory;
+  });
 
-        {/* CSS dla animacji */}
-        <style jsx>{`
-          @keyframes spin {
-            0% {
-              transform: rotate(0deg);
-            }
-            100% {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
+  const renderOffers = (list: OfferTileProps[]) =>
+    view === "tiles" ? (
+      <div className={OFFER_GRID}>
+        {list.map((offer) => (
+          <OfferTile key={offer.id} {...offer} showStatus />
+        ))}
       </div>
+    ) : (
+      <ul className="flex flex-col gap-2">
+        {list.map((offer) => (
+          <li key={offer.id}>
+            <OfferListRow offer={offer} href={`/offers/${offer.id}/${encodeURIComponent(offer.name)}`} showStatus />
+          </li>
+        ))}
+      </ul>
     );
-  }
+
+  const skeletons = (
+    <div className={OFFER_GRID} aria-busy="true" aria-label="Wczytywanie ofert">
+      {Array.from({ length: 4 }, (_, i) => (
+        <OfferTileSkeleton key={i} />
+      ))}
+    </div>
+  );
 
   if (error) {
     return (
-      <div
-        style={{
-          minHeight: "calc(100vh - 160px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#f7fafc",
-          padding: "20px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "white",
-            borderRadius: "16px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            padding: "40px",
-            textAlign: "center",
-            maxWidth: "500px",
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: "64px",
-              height: "64px",
-              backgroundColor: "#f87171",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
-            }}
-          >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <h2
-            style={{
-              fontSize: "24px",
-              color: "#dc2626",
-              marginBottom: "16px",
-            }}
-          >
-            Błąd ładowania
-          </h2>
-          <p
-            style={{
-              color: "#4a5568",
-              fontSize: "16px",
-              marginBottom: "30px",
-              lineHeight: "1.5",
-            }}
-          >
-            {error}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: "12px 24px",
-              backgroundColor: "#fbbf24",
-              color: "#1a202c",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "16px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              transition: "background-color 0.3s",
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "#f59e0b")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "#fbbf24")
-            }
-          >
-            Spróbuj ponownie
-          </button>
-        </div>
+      <div className={cn(pageContainer, "py-8")}>
+        <Card padding="lg" role="alert" className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft text-danger">
+            <LuCircleAlert size={22} aria-hidden />
+          </span>
+          <h2 className="text-base font-semibold text-ink">Nie udało się wczytać ulubionych</h2>
+          <p className="text-sm text-ink-muted">{error}</p>
+          <Button onClick={() => window.location.reload()}>Spróbuj ponownie</Button>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[calc(100vh-160px)] bg-gray-50 p-2 sm:p-5">
-      <div className="max-w-6xl mx-auto w-full">
-        {/* Zakładki */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setActiveTab("favorites")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === "favorites"
-                  ? "bg-yellow-400 text-gray-900"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <FaHeart size={16} />
-              Ulubione oferty
-            </button>
-            <button
-              onClick={() => setActiveTab("watched")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === "watched"
-                  ? "bg-yellow-400 text-gray-900"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              <FaEye size={16} />
-              Obserwowane kategorie
-            </button>
-          </div>
-          {!isMobile && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setView("tiles")}
-                className={`p-2 rounded-lg border-2 transition-all ${
-                  view === "tiles"
-                    ? "border-yellow-400 bg-yellow-50 text-yellow-600"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                }`}
-                aria-label="Widok kafelków"
-              >
-                <FaTableCells size={20} />
-              </button>
-              <button
-                onClick={() => setView("list")}
-                className={`p-2 rounded-lg border-2 transition-all ${
-                  view === "list"
-                    ? "border-yellow-400 bg-yellow-50 text-yellow-600"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                }`}
-                aria-label="Widok listy"
-              >
-                <FaListUl size={20} />
-              </button>
-            </div>
-          )}
+    <div className={cn(pageContainer, "py-6 sm:py-8")}>
+      <PageHeader title="Ulubione" description="Zapisane oferty i kategorie, które obserwujesz." />
+
+      {/* Zakładki + przełącznik widoku */}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div role="tablist" aria-label="Ulubione" className="flex gap-2 overflow-x-auto">
+          <Chip
+            role="tab"
+            aria-selected={activeTab === "favorites"}
+            selected={activeTab === "favorites"}
+            icon={<LuHeart size={15} aria-hidden />}
+            count={loading ? undefined : offers.length}
+            onClick={() => setActiveTab("favorites")}
+            className="shrink-0"
+          >
+            Ulubione oferty
+          </Chip>
+          <Chip
+            role="tab"
+            aria-selected={activeTab === "watched"}
+            selected={activeTab === "watched"}
+            icon={<LuEye size={15} aria-hidden />}
+            onClick={() => setActiveTab("watched")}
+            className="shrink-0"
+          >
+            Obserwowane kategorie
+          </Chip>
         </div>
-
-        {/* Zawartość zakładek */}
-        {activeTab === "favorites" ? (
-          /* Zakładka: Ulubione oferty */
-          <>
-            {loading ? (
-              <div className="flex justify-center items-center p-8">
-                <div className="w-8 h-8 border-4 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
-              </div>
-            ) : offers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">
-                  Nie masz jeszcze żadnych ulubionych ofert
-                </p>
-              </div>
-            ) : view === "tiles" ? (
-              <OfferTileSection
-                title=""
-                offers={offers}
-                loading={false}
-                emptyMessage=""
-                tileWidth={200}
-                tileHeight={220}
-                imageWidth={160}
-                imageHeight={100}
-                showCount={false}
-                isEditing={false}
-                showStatus={true}
-              />
-            ) : (
-              <div className="space-y-4">
-                {offers.map((offer) => (
-                  <Link
-                    key={offer.id}
-                    href={`/offers/${offer.id}/${offer.name}`}
-                    className="block"
-                  >
-                    <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-4 gap-4 hover:shadow-md transition-shadow cursor-pointer">
-                      <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                        <Image
-                          src={getImageUrl(offer.imageUrl)}
-                          alt={offer.name}
-                          width={96}
-                          height={64}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 text-lg truncate">
-                          {offer.name}
-                        </h3>
-                        <p className="text-gray-600 text-sm mt-1">
-                          {offer.location}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span
-                            className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                              offer.transactionType === "free"
-                                ? "bg-green-100 text-green-800"
-                                : offer.transactionType === "sale"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-purple-100 text-purple-800"
-                            }`}
-                          >
-                            {offer.transactionType === "free"
-                              ? "Za darmo"
-                              : offer.transactionType === "sale"
-                              ? "Na sprzedaż"
-                              : "Wymiana"}
-                          </span>
-                          {offer.status && (
-                            <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusColors(offer.status)}`}>
-                              {STATUS_LABELS[offer.status]}
-                            </span>
-                          )}
-                          {offer.distance && (
-                            <span className="text-blue-600 text-sm font-medium">
-                              ({offer.distance})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          /* Zakładka: Obserwowane kategorie */
-          <>
-            {/* Przycisk do wyboru kategorii */}
-            <div className="mb-6">
-              <button
-                onClick={() => {
-                  fetchFavoriteCategories();
-                  setShowCategoryModal(true);
-                }}
-                className="bg-yellow-400 text-gray-900 px-6 py-3 rounded-lg font-medium hover:bg-yellow-500 transition-colors"
-              >
-                Wybierz obserwowane kategorie
-              </button>
-              
-              {/* Komunikat o resetowaniu ulubionych kategorii */}
-              {selectedCategories.length === 0 && selectedSubcategories.length === 0 && (
-                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-blue-800">
-                        Ulubione kategorie zostały zresetowane
-                      </h3>
-                      <div className="mt-2 text-sm text-blue-700">
-                        <p>
-                          W związku z aktualizacją kategorii, Twoje ulubione kategorie zostały zresetowane. 
-                          Wybierz nowe kategorie, które Cię interesują, aby otrzymywać powiadomienia o nowych ofertach.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Filtry kategorii */}
-            {watchedOffers.length > 0 && availableCategoriesFromOffers.categoryIds.length > 0 && (
-              <div className="mb-6 bg-white rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Filtry kategorii</h3>
-                
-                <div className="space-y-4">
-                  {categories
-                    .filter(category => availableCategoriesFromOffers.categoryIds.includes(category.id))
-                    .map((category) => {
-                      const availableSubcategories = category.subcategories.filter(
-                        subcategory => availableCategoriesFromOffers.subcategoryIds.includes(subcategory.id)
-                      );
-                      
-                      return (
-                        <div key={category.id} className="border border-gray-200 rounded-lg p-3">
-                          {/* Kategoria */}
-                          <div className="mb-2">
-                            <button
-                              onClick={() => handleCategoryFilterToggle(category.id)}
-                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                categoryFilters.categoryIds.includes(category.id)
-                                  ? 'bg-yellow-400 text-gray-900'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              {category.name}
-                            </button>
-                          </div>
-                          
-                          {/* Podkategorie */}
-                          {availableSubcategories.length > 0 && (
-                            <div className="ml-4">
-                              <div className="flex flex-wrap gap-2">
-                                {availableSubcategories.map((subcategory) => (
-                                  <button
-                                    key={subcategory.id}
-                                    onClick={() => handleSubcategoryFilterToggle(subcategory.id)}
-                                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                      categoryFilters.subcategoryIds.includes(subcategory.id)
-                                        ? 'bg-yellow-300 text-gray-900'
-                                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                                    }`}
-                                  >
-                                    {subcategory.name}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-
-            {/* Lista obserwowanych ofert */}
-            {watchedLoading ? (
-              <div className="flex justify-center items-center p-8">
-                <div className="w-8 h-8 border-4 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
-              </div>
-            ) : watchedOffers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 text-lg">
-                  Nie masz jeszcze żadnych obserwowanych kategorii lub nie ma pasujących ofert
-                </p>
-                <p className="text-gray-500 text-sm mt-2">
-                  Kliknij &quot;Wybierz obserwowane kategorie&quot; aby dodać kategorie do obserwowania
-                </p>
-              </div>
-            ) : view === "tiles" ? (
-              <OfferTileSection
-                title=""
-                offers={watchedOffers.filter(offer => {
-                  // Jeśli nie ma żadnych filtrów zaznaczonych, pokaż wszystkie oferty
-                  if (categoryFilters.categoryIds.length === 0 && categoryFilters.subcategoryIds.length === 0) {
-                    return true;
-                  }
-                  
-                  // Sprawdź czy oferta pasuje do zaznaczonych kategorii lub podkategorii
-                  const matchesCategory = categoryFilters.categoryIds.includes(offer.categoryId || 0);
-                  const matchesSubcategory = categoryFilters.subcategoryIds.includes(offer.subcategoryId || 0);
-                  
-                  return matchesCategory || matchesSubcategory;
-                })}
-                loading={false}
-                emptyMessage=""
-                tileWidth={200}
-                tileHeight={220}
-                imageWidth={160}
-                imageHeight={100}
-                showCount={false}
-                isEditing={false}
-                showStatus={true}
-              />
-            ) : (
-              <div className="space-y-4">
-                {watchedOffers
-                  .filter(offer => {
-                    // Jeśli nie ma żadnych filtrów zaznaczonych, pokaż wszystkie oferty
-                    if (categoryFilters.categoryIds.length === 0 && categoryFilters.subcategoryIds.length === 0) {
-                      return true;
-                    }
-                    
-                    // Sprawdź czy oferta pasuje do zaznaczonych kategorii lub podkategorii
-                    const matchesCategory = categoryFilters.categoryIds.includes(offer.categoryId || 0);
-                    const matchesSubcategory = categoryFilters.subcategoryIds.includes(offer.subcategoryId || 0);
-                    
-                    return matchesCategory || matchesSubcategory;
-                  })
-                  .map((offer) => (
-                    <Link
-                      key={offer.id}
-                      href={`/offers/${offer.id}/${offer.name}`}
-                      className="block"
-                    >
-                      <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-4 gap-4 hover:shadow-md transition-shadow cursor-pointer">
-                        <div className="w-24 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                          <Image
-                            src={getImageUrl(offer.imageUrl)}
-                            alt={offer.name}
-                            width={96}
-                            height={64}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 text-lg truncate">
-                            {offer.name}
-                          </h3>
-                          <p className="text-gray-600 text-sm mt-1">
-                            {offer.location}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <span
-                              className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                                offer.transactionType === "free"
-                                  ? "bg-green-100 text-green-800"
-                                  : offer.transactionType === "sale"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-purple-100 text-purple-800"
-                              }`}
-                            >
-                              {offer.transactionType === "free"
-                                ? "Za darmo"
-                                : offer.transactionType === "sale"
-                                ? "Na sprzedaż"
-                                : "Wymiana"}
-                            </span>
-                            {offer.status && (
-                              <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusColors(offer.status)}`}>
-                                {STATUS_LABELS[offer.status]}
-                              </span>
-                            )}
-                            {offer.distance && (
-                              <span className="text-blue-600 text-sm font-medium">
-                                ({offer.distance})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Modal do wyboru kategorii */}
-        {showCategoryModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center z-50 p-2 sm:p-4 pt-4 sm:pt-4 pb-20 sm:pb-4">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[calc(100vh-6rem)] sm:max-h-[80vh] flex flex-col mt-0 sm:mt-0">
-              <div className="p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Wybierz obserwowane kategorie</h2>
-                <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                  Zaznacz kategorie i podkategorie, które chcesz obserwować.
-                </p>
-              </div>
-              
-              <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
-                <div className="space-y-4">
-                  {categories.map((category) => (
-                    <div key={category.id} className="border border-gray-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center mb-2 sm:mb-3">
-                        <input
-                          type="checkbox"
-                          id={`category-${category.id}`}
-                          checked={selectedCategories.includes(category.id)}
-                          onChange={() => handleCategoryToggle(category.id)}
-                          className="w-4 h-4 text-yellow-600 bg-gray-100 border-gray-300 rounded focus:ring-yellow-500 focus:ring-2"
-                        />
-                        <label
-                          htmlFor={`category-${category.id}`}
-                          className="ml-3 text-base sm:text-lg font-semibold text-gray-800 cursor-pointer"
-                        >
-                          {category.name}
-                        </label>
-                      </div>
-                      
-                      {category.subcategories.length > 0 && (
-                        <div className="ml-7 grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2">
-                          {category.subcategories.map((subcategory) => (
-                            <div key={subcategory.id} className="flex items-center">
-                              <input
-                                type="checkbox"
-                                id={`subcategory-${subcategory.id}`}
-                                checked={selectedSubcategories.includes(subcategory.id)}
-                                onChange={() => handleSubcategoryToggle(subcategory.id)}
-                                className="w-4 h-4 text-yellow-600 bg-gray-100 border-gray-300 rounded focus:ring-yellow-500 focus:ring-2"
-                              />
-                              <label
-                                htmlFor={`subcategory-${subcategory.id}`}
-                                className="ml-2 text-xs sm:text-sm text-gray-700 cursor-pointer"
-                              >
-                                {subcategory.name}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="p-4 sm:p-6 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0 bg-white sticky bottom-0">
-                <button
-                  onClick={() => setShowCategoryModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-sm sm:text-base"
-                >
-                  Anuluj
-                </button>
-                <button
-                  onClick={saveWatchedCategories}
-                  disabled={savingCategories}
-                  className="bg-yellow-400 text-gray-900 px-4 sm:px-6 py-2 rounded-lg font-medium hover:bg-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                >
-                  {savingCategories ? "Zapisywanie..." : "Zapisz"}
-                </button>
-              </div>
-            </div>
+        {!isMobile && (
+          <div className="flex shrink-0 gap-1 rounded-ui-md border border-line bg-surface p-0.5">
+            <IconButton label="Widok kafelków" icon={<LuLayoutGrid size={18} />} active={view === "tiles"} onClick={() => setView("tiles")} className="h-8 w-8" />
+            <IconButton label="Widok listy" icon={<LuList size={18} />} active={view === "list"} onClick={() => setView("list")} className="h-8 w-8" />
           </div>
         )}
       </div>
+
+      {activeTab === "favorites" ? (
+        /* Zakładka: Ulubione oferty */
+        loading ? (
+          skeletons
+        ) : offers.length === 0 ? (
+          <Card padding="lg" className="flex flex-col items-center gap-3 py-10 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+              <LuHeart size={22} aria-hidden />
+            </span>
+            <p className="text-sm text-ink-muted">Nie masz jeszcze żadnych ulubionych ofert. Kliknij serduszko przy ofercie, żeby ją tu zapisać.</p>
+            <Button href="/offers/search">Przeglądaj oferty</Button>
+          </Card>
+        ) : (
+          renderOffers(offers)
+        )
+      ) : (
+        /* Zakładka: Obserwowane kategorie */
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink-muted">Nowe oferty z wybranych kategorii pojawią się tutaj.</p>
+            <Button
+              leftIcon={<LuSlidersHorizontal size={16} />}
+              onClick={() => {
+                fetchFavoriteCategories();
+                setShowCategoryModal(true);
+              }}
+              className="sm:shrink-0"
+            >
+              Wybierz obserwowane kategorie
+            </Button>
+          </div>
+
+          {/* Komunikat o resetowaniu ulubionych kategorii */}
+          {selectedCategories.length === 0 && selectedSubcategories.length === 0 && (
+            <Alert tone="info">
+              <p className="font-medium text-ink">Ulubione kategorie zostały zresetowane</p>
+              <p className="mt-0.5">
+                W związku z aktualizacją kategorii, Twoje ulubione kategorie zostały zresetowane. Wybierz nowe kategorie, które Cię
+                interesują, aby otrzymywać powiadomienia o nowych ofertach.
+              </p>
+            </Alert>
+          )}
+
+          {/* Filtry kategorii */}
+          {watchedOffers.length > 0 && availableCategoriesFromOffers.categoryIds.length > 0 && (
+            <Card>
+              <CardHeader title="Filtry kategorii" className="mb-3" />
+              <div className="flex flex-col gap-3">
+                {categories
+                  .filter((category) => availableCategoriesFromOffers.categoryIds.includes(category.id))
+                  .map((category) => {
+                    const availableSubcategories = category.subcategories.filter((subcategory) =>
+                      availableCategoriesFromOffers.subcategoryIds.includes(subcategory.id)
+                    );
+                    return (
+                      <div key={category.id} className="flex flex-col gap-2">
+                        <div>
+                          <Chip
+                            selected={categoryFilters.categoryIds.includes(category.id)}
+                            onClick={() => handleCategoryFilterToggle(category.id)}
+                          >
+                            {category.name}
+                          </Chip>
+                        </div>
+                        {availableSubcategories.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pl-4">
+                            {availableSubcategories.map((subcategory) => (
+                              <Chip
+                                key={subcategory.id}
+                                selected={categoryFilters.subcategoryIds.includes(subcategory.id)}
+                                onClick={() => handleSubcategoryFilterToggle(subcategory.id)}
+                                className="h-8 px-3 text-xs"
+                              >
+                                {subcategory.name}
+                              </Chip>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </Card>
+          )}
+
+          {/* Lista obserwowanych ofert */}
+          {watchedLoading ? (
+            skeletons
+          ) : watchedOffers.length === 0 ? (
+            <Card padding="lg" className="flex flex-col items-center gap-2 py-10 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+                <LuEye size={22} aria-hidden />
+              </span>
+              <p className="text-sm text-ink">Nie masz jeszcze żadnych obserwowanych kategorii lub nie ma pasujących ofert.</p>
+              <p className="text-sm text-ink-muted">Kliknij „Wybierz obserwowane kategorie”, aby dodać kategorie do obserwowania.</p>
+            </Card>
+          ) : (
+            renderOffers(filteredWatchedOffers)
+          )}
+        </div>
+      )}
+
+      {/* Wybór obserwowanych kategorii */}
+      <Dialog
+        open={showCategoryModal}
+        onClose={() => setShowCategoryModal(false)}
+        title="Wybierz obserwowane kategorie"
+        description="Zaznacz kategorie i podkategorie, które chcesz obserwować."
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCategoryModal(false)}>
+              Anuluj
+            </Button>
+            <Button onClick={saveWatchedCategories} loading={savingCategories}>
+              {savingCategories ? "Zapisywanie…" : "Zapisz"}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {categories.map((category) => (
+            <fieldset key={category.id} className="rounded-ui-md border border-line p-3 sm:p-4">
+              <label className="flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.includes(category.id)}
+                  onChange={() => handleCategoryToggle(category.id)}
+                  className="h-4 w-4 rounded border-line-strong accent-[rgb(var(--brand))]"
+                />
+                <span className="text-sm font-semibold text-ink sm:text-base">{category.name}</span>
+              </label>
+              {category.subcategories.length > 0 && (
+                <div className="mt-2 grid gap-1.5 pl-7 sm:grid-cols-2">
+                  {category.subcategories.map((subcategory) => (
+                    <label key={subcategory.id} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubcategories.includes(subcategory.id)}
+                        onChange={() => handleSubcategoryToggle(subcategory.id)}
+                        className="h-4 w-4 rounded border-line-strong accent-[rgb(var(--brand))]"
+                      />
+                      <span className="text-sm text-ink-muted">{subcategory.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+          ))}
+        </div>
+      </Dialog>
     </div>
   );
 }

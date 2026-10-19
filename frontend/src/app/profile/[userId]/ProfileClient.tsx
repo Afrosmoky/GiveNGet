@@ -10,6 +10,7 @@ import { authorizedFetch, trackOfferClick } from '../../../utils/auth';
 import OfferTile from '../../../components/OfferTile';
 import { OfferTile as OfferTileType } from '../../../types/offer';
 import { StarInput, StarRating } from '../../../components/rating/Stars';
+import { OfferListRow } from '../../../components/offer/OfferListRow';
 import { Alert, Avatar, Badge, Button, Card, CardHeader, Dialog, IconButton, Spinner, Textarea, cn, pageContainer } from '../../../components/ui';
 
 const GoogleMapComponent = dynamic(() => import('../../../components/GoogleMapComponent'), {
@@ -30,8 +31,6 @@ const CATEGORIES: { key: RatingCategory; label: string; stat: 'cleanliness' | 'q
 ];
 
 const STAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five'] as const;
-
-const TRANSACTION_LABEL: Record<string, string> = { free: 'Za darmo', sale: 'Na sprzedaż', exchange: 'Wymiana' };
 
 const OFFER_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4';
 
@@ -371,21 +370,11 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
             <ul className="flex flex-col gap-2">
               {offers.map((offer) => (
                 <li key={offer.id}>
-                  <Link
+                  <OfferListRow
+                    offer={offer}
                     href={`/offers/${offer.id}/${encodeURIComponent(offer.name)}`}
                     onClick={() => trackOfferClick(offer.id)}
-                    className="flex items-center gap-3 rounded-ui-lg border border-line bg-surface p-3 transition-shadow hover:border-line-strong hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-                  >
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-ui-md bg-brand-soft sm:w-24">
-                      <Image src={getImageUrl(offer.imageUrl)} alt="" fill sizes="96px" className="object-cover" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">{offer.name}</p>
-                      {offer.location && <p className="truncate text-sm text-ink-muted">{offer.location}</p>}
-                      <Badge tone="brand" className="mt-1.5">{TRANSACTION_LABEL[offer.transactionType] ?? 'Wymiana'}</Badge>
-                    </div>
-                    <LuChevronRight size={18} className="shrink-0 text-ink-subtle" aria-hidden />
-                  </Link>
+                  />
                 </li>
               ))}
             </ul>

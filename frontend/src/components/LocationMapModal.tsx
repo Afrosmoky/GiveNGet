@@ -1,15 +1,18 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
-import { FaSearch, FaMapMarkerAlt } from 'react-icons/fa';
+import { LuMapPin, LuMapPinOff, LuSearch } from 'react-icons/lu';
 import { environment } from '../config';
+import { Button, Dialog, IconButton, Input, Spinner } from './ui';
 
 const mapContainerStyle = {
   width: '100%',
-  height: '500px',
-  borderRadius: '8px',
+  height: '100%',
 };
+// Kolor pinezki = --brand-primary (Google Maps nie czyta zmiennych CSS)
+const PIN_COLOR = '#0C6B4C';
 
 const libraries: ('places')[] = ['places'];
 
@@ -261,160 +264,106 @@ const LocationMapModal: React.FC<LocationMapModalProps> = ({ initialLat, initial
     }
   };
 
-  if (loadError) return <div>Błąd ładowania mapy.</div>;
-  if (!isLoaded) return <div>Ładowanie mapy...</div>;
+  const footer = (
+    <>
+      <Button variant="secondary" onClick={onClose}>
+        Anuluj
+      </Button>
+      <Button onClick={handleSelectClick} disabled={!markerPosition}>
+        Wybierz
+      </Button>
+    </>
+  );
 
-  const icon = {
-    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
-    fillColor: '#d35400',
-    fillOpacity: 1,
-    strokeWeight: 0,
-    scale: 1.5,
-    anchor: new google.maps.Point(12, 24)
-  };
+  // Portal: formularz oferty ma przodka z transformacją, która psułaby position: fixed okna
+  if (typeof document === 'undefined') return null;
 
-  return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', width: '90%', maxWidth: '800px' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '15px' }}>Wybierz lokalizację</h2>
-        
-        {/* Pole wyszukiwania */}
-        <div style={{ marginBottom: '15px', position: 'relative' }}>
-          <form onSubmit={handleSearchSubmit}>
-            <div style={{ position: 'relative' }}>
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={handleSearchInputChange}
-                placeholder="Wyszukaj adres lub miejsce..."
-                style={{
-                  width: '100%',
-                  padding: '12px 40px 12px 12px',
-                  fontSize: '16px',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '8px',
-                  outline: 'none',
-                  transition: 'border-color 0.3s'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#fbbf24'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-              />
-              <button
-                type="submit"
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '0'
-                }}
-              >
-                <FaSearch 
-                  style={{
-                    color: '#6b7280',
-                    fontSize: '16px'
+  return createPortal(
+    <Dialog open onClose={onClose} title="Wybierz lokalizację" description="Wyszukaj adres, kliknij mapę albo przeciągnij pinezkę." size="lg" footer={footer}>
+      {loadError ? (
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <LuMapPinOff size={22} className="text-ink-subtle" aria-hidden />
+          <p className="text-sm text-ink-muted">Nie udało się wczytać mapy.</p>
+        </div>
+      ) : !isLoaded ? (
+        <div className="flex justify-center py-12">
+          <Spinner className="h-6 w-6 text-brand" label="Ładowanie mapy" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {/* Wyszukiwanie adresu (Google Places) */}
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <Input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={handleSearchInputChange}
+              placeholder="Wyszukaj adres lub miejsce..."
+              aria-label="Wyszukaj adres"
+              autoComplete="off"
+              rightSlot={<IconButton type="submit" label="Szukaj" icon={<LuSearch size={17} />} className="h-8 w-8" />}
+            />
+            {showSuggestions && searchSuggestions.length > 0 && (
+              <ul role="listbox" className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-ui-md border border-line bg-surface shadow-pop">
+                {isSearching ? (
+                  <li className="px-4 py-3 text-center text-sm text-ink-muted">Wyszukiwanie…</li>
+                ) : (
+                  searchSuggestions.map((prediction) => (
+                    <li key={prediction.place_id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => handleSuggestionClick(prediction)}
+                        className="flex w-full items-center gap-2 border-b border-line px-4 py-3 text-left text-sm text-ink last:border-b-0 hover:bg-surface-muted"
+                      >
+                        <LuMapPin size={14} className="shrink-0 text-ink-subtle" aria-hidden />
+                        {prediction.description}
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </form>
+
+          {currentAddress && (
+            <p className="flex items-start gap-2 rounded-ui-md border border-brand/20 bg-brand-soft px-3 py-2.5 text-sm text-brand-strong">
+              <LuMapPin size={15} className="mt-0.5 shrink-0" aria-hidden />
+              <span>
+                <span className="font-semibold">Wybrana lokalizacja:</span> {currentAddress}
+              </span>
+            </p>
+          )}
+
+          <div className="h-72 overflow-hidden rounded-ui-md border border-line sm:h-[26rem]">
+            <GoogleMap
+              mapContainerStyle={mapContainerStyle}
+              center={markerPosition || { lat: 52.237049, lng: 21.017532 }}
+              zoom={13}
+              onClick={handleMapClick}
+              options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+            >
+              {markerPosition && (
+                <Marker
+                  position={markerPosition}
+                  draggable={true}
+                  onDragEnd={onMarkerDragEnd}
+                  icon={{
+                    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+                    fillColor: PIN_COLOR,
+                    fillOpacity: 1,
+                    strokeWeight: 0,
+                    scale: 1.5,
+                    anchor: new google.maps.Point(12, 24)
                   }}
                 />
-              </button>
-            </div>
-          </form>
-          
-          {/* Lista sugestii */}
-          {showSuggestions && searchSuggestions.length > 0 && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              backgroundColor: 'white',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-              zIndex: 1000,
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
-              {isSearching ? (
-                <div style={{ padding: '12px', textAlign: 'center', color: '#718096' }}>
-                  Wyszukiwanie...
-                </div>
-              ) : (
-                searchSuggestions.map((prediction, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSuggestionClick(prediction)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: 'none',
-                      backgroundColor: 'transparent',
-                      textAlign: 'left',
-                      fontSize: '14px',
-                      color: '#2d3748',
-                      borderBottom: index < searchSuggestions.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      transition: 'background-color 0.2s',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    <FaMapMarkerAlt style={{ color: '#6b7280', fontSize: '12px' }} />
-                    {prediction.description}
-                  </button>
-                ))
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Aktualny adres */}
-        {currentAddress && (
-          <div style={{
-            marginBottom: '15px',
-            padding: '12px',
-            backgroundColor: '#f0fff4',
-            border: '1px solid #68d391',
-            borderRadius: '8px',
-            fontSize: '14px',
-            color: '#2d3748',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <FaMapMarkerAlt style={{ color: '#38a169' }} />
-            <strong>Aktualna lokalizacja:</strong> {currentAddress}
+            </GoogleMap>
           </div>
-        )}
-
-        <GoogleMap
-          mapContainerStyle={mapContainerStyle}
-          center={markerPosition || { lat: 52.237049, lng: 21.017532 }}
-          zoom={13}
-          onClick={handleMapClick}
-        >
-          {markerPosition && (
-            <Marker
-              position={markerPosition}
-              draggable={true}
-              onDragEnd={onMarkerDragEnd}
-              icon={icon}
-            />
-          )}
-        </GoogleMap>
-        
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '15px' }}>
-          <button onClick={onClose} style={{ marginRight: '10px', padding: '10px 20px', borderRadius: '5px', border: '1px solid #ccc' }}>Anuluj</button>
-          <button onClick={handleSelectClick} style={{ padding: '10px 20px', borderRadius: '5px', border: 'none', background: '#fbbf24', color: '#2d3748', fontWeight: 'bold' }}>Wybierz</button>
         </div>
-      </div>
-    </div>
+      )}
+    </Dialog>,
+    document.body
   );
 };
 

@@ -6,19 +6,9 @@ import { authorizedFetch } from '../utils/auth';
 import OfferTile from './OfferTile';
 import { OfferTileSkeleton } from './offer/OfferTileSkeleton';
 import { OfferTileProps, OfferStatus, STATUS_LABELS } from '../types/offer';
-import { LuChevronRight, LuCircleAlert, LuLayoutGrid, LuList, LuPackageOpen } from 'react-icons/lu';
-import Link from 'next/link';
-import Image from 'next/image';
-import { getImageUrl } from '../utils/imageUtils';
-import { Badge, Button, Card, Chip, IconButton, type BadgeTone } from './ui';
-
-const STATUS_TONE: Record<OfferStatus, BadgeTone> = {
-  ACTIVE: 'success',
-  INACTIVE: 'neutral',
-  PENDING_VERIFICATION: 'warning',
-};
-
-const TRANSACTION_LABEL: Record<string, string> = { free: 'Za darmo', sale: 'Na sprzedaż', exchange: 'Wymiana' };
+import { LuCircleAlert, LuLayoutGrid, LuList, LuPackageOpen } from 'react-icons/lu';
+import { OfferListRow } from './offer/OfferListRow';
+import { Button, Card, Chip, IconButton } from './ui';
 
 const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4';
 
@@ -155,27 +145,7 @@ export function MyOffersDetailView() {
         <ul className="flex flex-col gap-2">
           {filteredOffers.map((offer) => (
             <li key={offer.id}>
-              <Link
-                href={`/offers/edit/${offer.id}`}
-                className="flex items-center gap-3 rounded-ui-lg border border-line bg-surface p-3 shadow-card transition-shadow hover:border-line-strong hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-              >
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-ui-md bg-brand-soft sm:h-16 sm:w-24">
-                  <Image src={getImageUrl(offer.imageUrl)} alt="" fill sizes="96px" className="object-cover" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-ink">{offer.name}</p>
-                  {offer.location && <p className="truncate text-sm text-ink-muted">{offer.location}</p>}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <Badge tone="brand">{TRANSACTION_LABEL[offer.transactionType] ?? 'Wymiana'}</Badge>
-                    {offer.status && <Badge tone={STATUS_TONE[offer.status]}>{STATUS_LABELS[offer.status]}</Badge>}
-                    {offer.distance && <span className="text-xs text-ink-subtle">{offer.distance}</span>}
-                  </div>
-                </div>
-                <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-brand">
-                  <span className="hidden sm:inline">Edytuj</span>
-                  <LuChevronRight size={16} aria-hidden />
-                </span>
-              </Link>
+              <OfferListRow offer={offer} href={`/offers/edit/${offer.id}`} showStatus actionLabel="Edytuj" />
             </li>
           ))}
         </ul>
