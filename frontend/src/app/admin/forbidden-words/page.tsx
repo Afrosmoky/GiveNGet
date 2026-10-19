@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { LuCircleAlert, LuPencil, LuPlus, LuRefreshCw, LuSearch, LuX } from 'react-icons/lu';
 import { environment } from '../../../config';
 import { authorizedFetch } from '../../../utils/auth';
+import { Badge, Button, Card, CardHeader, Chip, Dialog, IconButton, Input, PageHeader, Select, Spinner, cn, consolePage } from '../../../components/ui';
 
 interface ForbiddenWord {
   id: number;
@@ -11,480 +13,527 @@ interface ForbiddenWord {
   category: string | null;
 }
 
+type PatternType = 'WORD' | 'REGEX';
+
+/** Element listy wysyłanej do POST /api/admin/forbidden-patterns (upsert: id=null → nowy, _delete → usuń). */
 interface EditableWord {
   id?: number;
   pattern: string;
-  type: 'WORD' | 'REGEX';
+  type: PatternType;
   category?: string;
   active?: boolean;
   _delete?: boolean;
 }
 
 interface ForbiddenWordsData {
-  wordsByCategory: {
-    [category: string]: ForbiddenWord[];
-  };
-  regexesByCategory: {
-    [category: string]: ForbiddenWord[];
-  };
+  wordsByCategory: Record<string, ForbiddenWord[]>;
+  regexesByCategory: Record<string, ForbiddenWord[]>;
+}
+
+const TYPE_LABELS: Record<PatternType, string> = { WORD: 'Słowa', REGEX: 'Wyrażenia regularne' };
+
+async function upsert(items: EditableWord[]): Promise<string | null> {
+  try {
+    const response = await authorizedFetch(`${environment.apiUrl}/api/admin/forbidden-patterns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(items),
+    });
+    return response.ok ? null : (await response.text()) || 'Nie udało się zapisać zmian.';
+  } catch {
+    return 'Błąd połączenia z serwerem.';
+  }
 }
 
 export default function ForbiddenWordsPage() {
   const [data, setData] = useState<ForbiddenWordsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
-  const [editingCategory, setEditingCategory] = useState<string | null>(null);
-  const [editingWords, setEditingWords] = useState<EditableWord[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<{ word: ForbiddenWord; type: PatternType } | null>(null);
+  const [editing, setEditing] = useState<{ category: string; type: PatternType } | null>(null);
 
-  const didInit = useRef(false);
-
-  useEffect(() => {
-    if (didInit.current) return;
-    didInit.current = true;
-    fetchForbiddenWords();
-  }, []);
-
-  const fetchForbiddenWords = async () => {
+  const fetchPatterns = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-
       const response = await authorizedFetch(`${environment.apiUrl}/api/admin/forbidden-patterns`);
-
-      if (response.ok) {
-        const responseData = await response.json();
-        setData(responseData);
-      } else {
-        const errorText = await response.text();
-        setError(`Błąd pobierania danych: ${errorText}`);
-      }
-    } catch (error) {
-      console.error('Błąd podczas pobierania słów zakazanych:', error);
-      setError('Błąd połączenia z serwerem');
+      if (response.ok) setData((await response.json()) as ForbiddenWordsData);
+      else if (response.status === 403) setError('Wzorce zakazane może zmieniać tylko administrator.');
+      else setError((await response.text()) || 'Nie udało się pobrać wzorców.');
+    } catch {
+      setError('Błąd połączenia z serwerem.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleRefresh = () => {
-    fetchForbiddenWords();
-  };
+  useEffect(() => {
+    void fetchPatterns();
+  }, [fetchPatterns]);
 
-  const handleToggleStatus = async (word: ForbiddenWord) => {
+  const categories = useMemo(() => {
+    if (!data) return [];
+    const names = new Set([...Object.keys(data.wordsByCategory), ...Object.keys(data.regexesByCategory)]);
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, 'pl'))
+      .map((name) => ({
+        name,
+        count: (data.wordsByCategory[name]?.length ?? 0) + (data.regexesByCategory[name]?.length ?? 0),
+      }));
+  }, [data]);
+
+  // Domyślnie pierwsza kategoria; po usunięciu ostatniego wzorca kategorii — kolejna
+  useEffect(() => {
+    if (categories.length > 0 && (!category || !categories.some((c) => c.name === category))) {
+      setCategory(categories[0].name);
+    }
+  }, [categories, category]);
+
+  const searching = query.trim().length > 0;
+  const needle = query.trim().toLowerCase();
+
+  /** Przy wyszukiwaniu przeszukujemy wszystkie kategorie, inaczej pokazujemy wybraną. */
+  const sections = useMemo(() => {
+    if (!data) return [];
+    const names = searching ? categories.map((c) => c.name) : category ? [category] : [];
+    return names.flatMap((name) =>
+      (['WORD', 'REGEX'] as PatternType[]).map((type) => {
+        const source = type === 'WORD' ? data.wordsByCategory[name] : data.regexesByCategory[name];
+        const words = (source ?? []).filter((w) => !searching || w.pattern.toLowerCase().includes(needle));
+        return { category: name, type, words, total: source?.length ?? 0 };
+      })
+    ).filter((s) => (searching ? s.words.length > 0 : true));
+  }, [data, categories, category, searching, needle]);
+
+  const setLocalActive = (id: number, active: boolean) =>
+    setData((prev) => {
+      if (!prev) return prev;
+      const update = (groups: Record<string, ForbiddenWord[]>) =>
+        Object.fromEntries(Object.entries(groups).map(([cat, words]) => [cat, words.map((w) => (w.id === id ? { ...w, active } : w))]));
+      return { wordsByCategory: update(prev.wordsByCategory), regexesByCategory: update(prev.regexesByCategory) };
+    });
+
+  const toggle = async (word: ForbiddenWord) => {
+    setUpdatingIds((prev) => new Set(prev).add(word.id));
+    setActionError(null);
     try {
-      // Dodaj ID do listy aktualizowanych
-      setUpdatingIds(prev => new Set(prev).add(word.id));
-
-      const newStatus = !word.active;
       const response = await authorizedFetch(
-        `${environment.apiUrl}/api/admin/forbidden-patterns/${word.id}?active=${newStatus}`,
-        {
-          method: 'PATCH'
-        }
+        `${environment.apiUrl}/api/admin/forbidden-patterns/${word.id}?active=${!word.active}`,
+        { method: 'PATCH' }
       );
-
-      if (response.ok) {
-        // Aktualizuj lokalny stan
-        setData(prevData => {
-          if (!prevData) return null;
-
-          const updateWordInCategory = (category: string, words: ForbiddenWord[]) => {
-            return words.map(w => 
-              w.id === word.id ? { ...w, active: newStatus } : w
-            );
-          };
-
-          return {
-            wordsByCategory: Object.fromEntries(
-              Object.entries(prevData.wordsByCategory).map(([cat, words]) => [
-                cat,
-                updateWordInCategory(cat, words)
-              ])
-            ),
-            regexesByCategory: Object.fromEntries(
-              Object.entries(prevData.regexesByCategory).map(([cat, words]) => [
-                cat,
-                updateWordInCategory(cat, words)
-              ])
-            )
-          };
-        });
-      } else {
-        const errorText = await response.text();
-        console.error('Błąd zmiany statusu:', errorText);
-        // Można dodać toast notification tutaj
-      }
-    } catch (error) {
-      console.error('Błąd podczas zmiany statusu:', error);
+      if (response.ok) setLocalActive(word.id, !word.active);
+      else setActionError((await response.text()) || 'Nie udało się zmienić statusu wzorca.');
+    } catch {
+      setActionError('Błąd połączenia z serwerem.');
     } finally {
-      // Usuń ID z listy aktualizowanych
-      setUpdatingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(word.id);
-        return newSet;
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(word.id);
+        return next;
       });
     }
-  };
-
-  const handleEditCategory = (category: string, isRegex: boolean = false) => {
-    if (!data) return;
-
-    const words = isRegex ? data.regexesByCategory[category] || [] : data.wordsByCategory[category] || [];
-    const editableWords: EditableWord[] = words.map(word => ({
-      id: word.id,
-      pattern: word.pattern,
-      type: isRegex ? 'REGEX' : 'WORD',
-      category: word.category || undefined,
-      active: word.active
-    }));
-
-    setEditingCategory(category);
-    setEditingWords(editableWords);
-    setIsEditing(true);
-  };
-
-  const handleSaveChanges = async () => {
-    try {
-      setSaving(true);
-
-      const response = await authorizedFetch(`${environment.apiUrl}/api/admin/forbidden-patterns`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(editingWords)
-      });
-
-      if (response.ok) {
-        // Odśwież dane
-        await fetchForbiddenWords();
-        setIsEditing(false);
-        setEditingCategory(null);
-        setEditingWords([]);
-      } else {
-        const errorText = await response.text();
-        console.error('Błąd zapisywania:', errorText);
-      }
-    } catch (error) {
-      console.error('Błąd podczas zapisywania:', error);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditingCategory(null);
-    setEditingWords([]);
-  };
-
-  const handleAddWord = () => {
-    const newWord: EditableWord = {
-      pattern: '',
-      type: editingCategory && data?.regexesByCategory[editingCategory] ? 'REGEX' : 'WORD',
-      category: editingCategory || undefined,
-      active: true
-    };
-    setEditingWords([...editingWords, newWord]);
-  };
-
-  const handleUpdateWord = (index: number, field: keyof EditableWord, value: string | boolean) => {
-    const updated = [...editingWords];
-    updated[index] = { ...updated[index], [field]: value };
-    setEditingWords(updated);
-  };
-
-  const handleDeleteWord = (index: number) => {
-    const word = editingWords[index];
-    if (word.id) {
-      // Oznacz jako do usunięcia
-      const updated = [...editingWords];
-      updated[index] = { ...updated[index], _delete: true };
-      setEditingWords(updated);
-    } else {
-      // Usuń z listy (nowe słowo)
-      const updated = editingWords.filter((_, i) => i !== index);
-      setEditingWords(updated);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="text-center">
-          <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Ładowanie słów zakazanych...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="max-w-md mx-auto text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <div className="text-red-600 mb-4">
-              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-red-800 mb-2">Błąd</h2>
-            <p className="text-red-700 mb-4">{error}</p>
-            <button
-              onClick={handleRefresh}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Spróbuj ponownie
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const renderWordsSection = (title: string, words: ForbiddenWord[], isRegex: boolean = false) => {
-    if (!words || words.length === 0) {
-      return (
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">{title}</h3>
-          <p className="text-gray-500">Brak słów w tej kategorii</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-700">{title}</h3>
-          <button
-            onClick={() => handleEditCategory(title.replace('Kategoria: ', ''), isRegex)}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
-          >
-            Edytuj
-          </button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {words.map((word) => (
-            <div key={word.id} className="p-3 bg-gray-50 rounded-lg border">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-mono text-sm bg-gray-200 px-2 py-1 rounded flex-1 truncate">
-                  {word.pattern}
-                </span>
-                {isRegex && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded flex-shrink-0">
-                    REGEX
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">
-                  ID: {word.id}
-                </div>
-                <button
-                  onClick={() => handleToggleStatus(word)}
-                  disabled={updatingIds.has(word.id)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    word.active 
-                      ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                      : 'bg-red-100 text-red-800 hover:bg-red-200'
-                  }`}
-                >
-                  {updatingIds.has(word.id) ? (
-                    <div className="flex items-center gap-1">
-                      <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-                      <span>...</span>
-                    </div>
-                  ) : (
-                    word.active ? 'Aktywne' : 'Nieaktywne'
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Słowa zakazane</h1>
-            <p className="text-gray-600 mt-2">Zarządzanie słowami i wyrażeniami zakazanymi</p>
-          </div>
-          <button
-            onClick={handleRefresh}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+    <div className={consolePage}>
+      <PageHeader
+        title="Słowa zakazane"
+        description="Wzorce wyłapywane w ofertach i wiadomościach. Zmiany działają od razu."
+        actions={
+          <Button variant="secondary" leftIcon={<LuRefreshCw size={16} />} onClick={() => void fetchPatterns()} disabled={loading}>
             Odśwież
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      {/* Content */}
-      {data ? (
-        <div className="space-y-8">
-          {/* Słowa zakazane */}
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Słowa zakazane</h2>
-            <div className="space-y-6">
-              {Object.entries(data.wordsByCategory).map(([category, words]) => (
-                <div key={category}>
-                  {renderWordsSection(
-                    `Kategoria: ${category}`,
-                    words,
-                    false
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Wyrażenia regularne */}
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Wyrażenia regularne</h2>
-            <div className="space-y-6">
-              {Object.entries(data.regexesByCategory).map(([category, regexes]) => (
-                <div key={category}>
-                  {renderWordsSection(
-                    `Kategoria: ${category}`,
-                    regexes,
-                    true
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+      {error ? (
+        <Card role="alert" className="flex flex-col items-start gap-3 border-danger/30 bg-danger-soft">
+          <p className="flex items-center gap-2 text-sm text-danger">
+            <LuCircleAlert size={16} aria-hidden /> {error}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => void fetchPatterns()}>
+            Spróbuj ponownie
+          </Button>
+        </Card>
+      ) : !data ? (
+        <div className="flex justify-center py-16">
+          <Spinner className="h-6 w-6 text-brand" />
         </div>
       ) : (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Brak danych do wyświetlenia</p>
-        </div>
+        <>
+          <AddPatternCard
+            categories={categories.map((c) => c.name)}
+            defaultCategory={category ?? ''}
+            onAdded={(cat) => {
+              setCategory(cat);
+              setQuery('');
+              void fetchPatterns();
+            }}
+          />
+
+          <Card className="mb-4">
+            <Input
+              type="search"
+              label="Szukaj wzorca"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Szuka we wszystkich kategoriach…"
+              leftIcon={<LuSearch size={16} />}
+              containerClassName="mb-4"
+            />
+            <div role="group" aria-label="Kategoria" className={cn('flex flex-wrap gap-2', searching && 'opacity-50')}>
+              {categories.map((c) => (
+                <Chip key={c.name} selected={!searching && category === c.name} count={c.count} onClick={() => { setQuery(''); setCategory(c.name); }}>
+                  {c.name}
+                </Chip>
+              ))}
+            </div>
+          </Card>
+
+          {actionError && (
+            <p role="alert" className="mb-4 rounded-ui-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
+              {actionError}
+            </p>
+          )}
+
+          {sections.length === 0 ? (
+            <Card className="border-dashed text-center">
+              <p className="text-sm text-ink-muted">{searching ? `Brak wzorców pasujących do „${query.trim()}”.` : 'Brak wzorców.'}</p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {sections.map((s) => (
+                <Card key={`${s.category}-${s.type}`}>
+                  <CardHeader
+                    title={
+                      <span className="flex flex-wrap items-center gap-2">
+                        {searching && <span>{s.category} ·</span>}
+                        {TYPE_LABELS[s.type]}
+                        <Badge>{searching ? `${s.words.length} z ${s.total}` : s.total}</Badge>
+                      </span>
+                    }
+                    description={s.type === 'REGEX' ? 'Dopasowanie wyrażeniem regularnym — testuj ostrożnie.' : undefined}
+                    actions={
+                      s.total > 0 && (
+                        <Button variant="secondary" size="sm" leftIcon={<LuPencil size={14} />} onClick={() => setEditing({ category: s.category, type: s.type })}>
+                          Edytuj
+                        </Button>
+                      )
+                    }
+                  />
+                  {s.words.length === 0 ? (
+                    <p className="text-sm text-ink-muted">Brak wzorców tego typu w kategorii.</p>
+                  ) : (
+                    <ul className="flex flex-wrap gap-2">
+                      {s.words.map((word) => (
+                        <PatternPill
+                          key={word.id}
+                          word={word}
+                          busy={updatingIds.has(word.id)}
+                          onToggle={() => void toggle(word)}
+                          onDelete={() => setToDelete({ word, type: s.type })}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-4 text-xs text-ink-subtle">
+            Kliknij wzorzec, żeby go wyłączyć albo włączyć. Wyłączony zostaje na liście, ale nie blokuje treści.
+          </p>
+        </>
       )}
 
-      {/* Modal edycji */}
-      {isEditing && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Edytuj kategorię: {editingCategory}
-                </h2>
-                <button
-                  onClick={handleCancelEdit}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-              <div className="space-y-4">
-                {editingWords.map((word, index) => (
-                  <div key={index} className={`p-4 border rounded-lg ${word._delete ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Wzorzec
-                        </label>
-                        <input
-                          type="text"
-                          value={word.pattern}
-                          onChange={(e) => handleUpdateWord(index, 'pattern', e.target.value)}
-                          disabled={word._delete}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                          placeholder="Wprowadź wzorzec..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Typ
-                        </label>
-                        <select
-                          value={word.type}
-                          onChange={(e) => handleUpdateWord(index, 'type', e.target.value as 'WORD' | 'REGEX')}
-                          disabled={word._delete}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                        >
-                          <option value="WORD">Słowo</option>
-                          <option value="REGEX">Regex</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Status
-                        </label>
-                        <div className="flex items-center gap-4">
-                          <label className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={word.active}
-                              onChange={(e) => handleUpdateWord(index, 'active', e.target.checked)}
-                              disabled={word._delete}
-                              className="mr-2"
-                            />
-                            Aktywne
-                          </label>
-                          <button
-                            onClick={() => handleDeleteWord(index)}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                          >
-                            {word._delete ? 'Przywróć' : 'Usuń'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {word._delete && (
-                      <div className="mt-2 text-sm text-red-600">
-                        ⚠️ Ten wpis zostanie usunięty
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={handleAddWord}
-                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors"
-                >
-                  + Dodaj nowe słowo
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={handleCancelEdit}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveChanges}
-                disabled={saving}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
-              </button>
-            </div>
-          </div>
-        </div>
+      <DeletePatternDialog
+        target={toDelete}
+        onClose={() => setToDelete(null)}
+        onDeleted={() => {
+          setToDelete(null);
+          void fetchPatterns();
+        }}
+      />
+      {editing && data && (
+        <EditCategoryDialog
+          category={editing.category}
+          type={editing.type}
+          words={(editing.type === 'WORD' ? data.wordsByCategory : data.regexesByCategory)[editing.category] ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            void fetchPatterns();
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function PatternPill({ word, busy, onToggle, onDelete }: { word: ForbiddenWord; busy: boolean; onToggle: () => void; onDelete: () => void }) {
+  return (
+    <li
+      className={cn(
+        'inline-flex h-8 items-center overflow-hidden rounded-full border text-sm',
+        word.active ? 'border-line bg-surface' : 'border-dashed border-line-strong bg-surface-muted'
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={busy}
+        aria-pressed={word.active}
+        title={word.active ? 'Aktywny — kliknij, by wyłączyć' : 'Wyłączony — kliknij, by włączyć'}
+        className={cn(
+          'flex h-full items-center gap-1.5 pl-3 pr-1.5 font-mono transition-colors hover:bg-surface-muted disabled:cursor-wait',
+          word.active ? 'text-ink' : 'text-ink-subtle line-through'
+        )}
+      >
+        {busy ? (
+          <Spinner className="h-3 w-3" />
+        ) : (
+          <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', word.active ? 'bg-success' : 'bg-ink-subtle')} />
+        )}
+        <span className="max-w-[16rem] truncate">{word.pattern}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={`Usuń wzorzec ${word.pattern}`}
+        className="flex h-full items-center px-2 text-ink-subtle transition-colors hover:bg-danger-soft hover:text-danger"
+      >
+        <LuX size={14} />
+      </button>
+    </li>
+  );
+}
+
+function AddPatternCard({ categories, defaultCategory, onAdded }: { categories: string[]; defaultCategory: string; onAdded: (category: string) => void }) {
+  const [pattern, setPattern] = useState('');
+  const [type, setType] = useState<PatternType>('WORD');
+  const [category, setCategory] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const effectiveCategory = (category || defaultCategory).trim();
+
+  const submit = async () => {
+    if (!pattern.trim()) {
+      setError('Wpisz wzorzec.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await upsert([{ pattern: pattern.trim(), type, category: effectiveCategory || undefined, active: true }]);
+    setSaving(false);
+    if (result) {
+      setError(result);
+      return;
+    }
+    setPattern('');
+    onAdded(effectiveCategory);
+  };
+
+  return (
+    <Card className="mb-4">
+      <CardHeader title="Dodaj wzorzec" description="Nowa kategoria powstaje sama, gdy wpiszesz nazwę spoza listy." className="mb-3" />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto] lg:items-end"
+      >
+        <Input label="Wzorzec" value={pattern} onChange={(e) => setPattern(e.target.value)} placeholder={type === 'REGEX' ? 'np. \\bkup\\s+teraz\\b' : 'np. gratis'} className="font-mono" error={error ?? undefined} />
+        <Select label="Typ" value={type} onChange={(e) => setType(e.target.value as PatternType)}>
+          <option value="WORD">Słowo</option>
+          <option value="REGEX">Wyrażenie regularne</option>
+        </Select>
+        <Input label="Kategoria" value={category} onChange={(e) => setCategory(e.target.value.toUpperCase())} placeholder={defaultCategory || 'np. SPAM'} list="forbidden-categories" />
+        <datalist id="forbidden-categories">
+          {categories.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+        <Button type="submit" loading={saving} leftIcon={<LuPlus size={16} />} className="sm:col-span-2 lg:col-span-1">
+          Dodaj
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+function DeletePatternDialog({
+  target,
+  onClose,
+  onDeleted,
+}: {
+  target: { word: ForbiddenWord; type: PatternType } | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setError(null), [target]);
+
+  const confirm = async () => {
+    if (!target) return;
+    setDeleting(true);
+    const result = await upsert([{ id: target.word.id, pattern: target.word.pattern, type: target.type, _delete: true }]);
+    setDeleting(false);
+    if (result) setError(result);
+    else onDeleted();
+  };
+
+  return (
+    <Dialog
+      open={target !== null}
+      onClose={onClose}
+      title="Usunąć wzorzec?"
+      description="Usunięcia nie da się cofnąć. Jeśli chcesz tylko przestać go stosować — wyłącz go."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Anuluj
+          </Button>
+          <Button variant="danger" loading={deleting} onClick={confirm}>
+            Usuń
+          </Button>
+        </>
+      }
+    >
+      {target && (
+        <p className="text-sm text-ink">
+          <span className="rounded-ui-sm bg-surface-sunken px-2 py-1 font-mono">{target.word.pattern}</span>
+          <span className="ml-2 text-ink-muted">· {target.word.category ?? 'bez kategorii'}</span>
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </Dialog>
+  );
+}
+
+/** Edycja hurtowa kategorii — zmiana treści, typu i stanu wielu wzorców jednym zapisem. */
+function EditCategoryDialog({
+  category,
+  type,
+  words,
+  onClose,
+  onSaved,
+}: {
+  category: string;
+  type: PatternType;
+  words: ForbiddenWord[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [items, setItems] = useState<EditableWord[]>(() =>
+    words.map((w) => ({ id: w.id, pattern: w.pattern, type, category: w.category ?? undefined, active: w.active }))
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const update = (index: number, patch: Partial<EditableWord>) => setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    // Puste nowe wiersze pomijamy, żeby nie zapisać pustego wzorca
+    const result = await upsert(items.filter((item) => item.id || item.pattern.trim()));
+    setSaving(false);
+    if (result) setError(result);
+    else onSaved();
+  };
+
+  const marked = items.filter((i) => i._delete).length;
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      title={`Edytuj: ${category}`}
+      description={`${TYPE_LABELS[type]} · ${items.length} pozycji${marked ? ` · ${marked} do usunięcia` : ''}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Anuluj
+          </Button>
+          <Button loading={saving} onClick={save}>
+            Zapisz zmiany
+          </Button>
+        </>
+      }
+    >
+      <ul className="space-y-2">
+        {items.map((item, index) => (
+          <li
+            key={item.id ?? `new-${index}`}
+            className={cn('flex items-center gap-2 rounded-ui-md border p-2', item._delete ? 'border-danger/30 bg-danger-soft' : 'border-line')}
+          >
+            <Input
+              aria-label="Wzorzec"
+              value={item.pattern}
+              onChange={(e) => update(index, { pattern: e.target.value })}
+              disabled={item._delete}
+              className={cn('font-mono', item._delete && 'line-through')}
+              placeholder="Nowy wzorzec…"
+            />
+            <Select
+              aria-label="Typ"
+              value={item.type}
+              onChange={(e) => update(index, { type: e.target.value as PatternType })}
+              disabled={item._delete}
+              containerClassName="w-28 shrink-0"
+            >
+              <option value="WORD">Słowo</option>
+              <option value="REGEX">Regex</option>
+            </Select>
+            <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-muted">
+              <input
+                type="checkbox"
+                checked={item.active ?? true}
+                onChange={(e) => update(index, { active: e.target.checked })}
+                disabled={item._delete}
+                className="h-4 w-4 accent-[rgb(var(--brand))]"
+              />
+              <span className="hidden sm:inline">Aktywny</span>
+            </label>
+            <IconButton
+              label={item._delete ? 'Przywróć' : 'Usuń'}
+              icon={item._delete ? <LuRefreshCw size={16} /> : <LuX size={16} />}
+              onClick={() =>
+                item.id ? update(index, { _delete: !item._delete }) : setItems((prev) => prev.filter((_, i) => i !== index))
+              }
+              className="h-9 w-9 shrink-0"
+            />
+          </li>
+        ))}
+      </ul>
+      <Button
+        variant="ghost"
+        size="sm"
+        leftIcon={<LuPlus size={14} />}
+        className="mt-3"
+        onClick={() => setItems((prev) => [...prev, { pattern: '', type, category, active: true }])}
+      >
+        Dodaj wiersz
+      </Button>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-danger">
+          {error}
+        </p>
+      )}
+    </Dialog>
   );
 }

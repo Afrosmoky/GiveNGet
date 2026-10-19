@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LuCamera, LuCameraOff } from 'react-icons/lu';
+import { Button, Card, CardHeader, cn } from './ui';
 
 interface PickupScannerProps {
   /** Wywoływane z surową treścią QR — wyciągnięcie kodu robi strona. */
   onScan: (rawValue: string) => void;
-  /** Blokuje skaner, gdy trwa potwierdzanie poprzedniego kodu. */
+  /** Blokuje skaner, gdy trwa potwierdzanie poprzedniego kodu albo na ekranie jest wynik. */
   paused?: boolean;
+  /** Podpis pod podglądem kamery w czasie pauzy. */
+  pausedLabel?: string;
 }
 
 const READER_ELEMENT_ID = 'pickup-qr-reader';
@@ -22,7 +26,7 @@ const READER_ELEMENT_ID = 'pickup-qr-reader';
  * certyfikatu `getUserMedia` nie istnieje, dlatego sprawdzamy to zawczasu i mówimy
  * wprost, że trzeba użyć wpisywania ręcznego, zamiast pokazywać nieokreślony błąd.
  */
-export default function PickupScanner({ onScan, paused = false }: PickupScannerProps) {
+export default function PickupScanner({ onScan, paused = false, pausedLabel = 'Potwierdzam odbiór…' }: PickupScannerProps) {
   const [active, setActive] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,53 +124,33 @@ export default function PickupScanner({ onScan, paused = false }: PickupScannerP
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-gray-900 sm:text-lg">Skan kodu QR</h2>
-        {active ? (
-          <button
-            type="button"
-            onClick={handleStop}
-            className="rounded-lg border-2 border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-          >
-            Zatrzymaj
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={starting}
-            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-60"
-          >
-            {starting ? 'Uruchamiam…' : 'Włącz kamerę'}
-          </button>
-        )}
-      </div>
-
-      {/* Kontener biblioteki. Musi istnieć zawsze, gdy skaner jest aktywny. */}
-      <div
-        id={READER_ELEMENT_ID}
-        className={`overflow-hidden rounded-lg ${active ? 'block bg-black' : 'hidden'}`}
+    <Card padding="md">
+      <CardHeader
+        title="Skan kodu QR"
+        description={!active && !error ? 'Skieruj kamerę na kod QR z telefonu klienta.' : undefined}
+        actions={
+          active ? (
+            <Button variant="secondary" leftIcon={<LuCameraOff size={16} />} onClick={handleStop}>
+              Zatrzymaj
+            </Button>
+          ) : (
+            <Button variant="secondary" leftIcon={<LuCamera size={16} />} loading={starting} onClick={handleStart}>
+              {starting ? 'Uruchamiam…' : 'Włącz kamerę'}
+            </Button>
+          )
+        }
       />
 
-      {!active && !error && (
-        <p className="text-sm text-gray-600">
-          Włącz kamerę i skieruj ją na kod QR z telefonu klienta. Możesz też wpisać kod ręcznie poniżej.
-        </p>
-      )}
+      {/* Kontener biblioteki. Musi istnieć zawsze, gdy skaner jest aktywny. */}
+      <div id={READER_ELEMENT_ID} className={cn('overflow-hidden rounded-ui-lg', active ? 'block bg-black' : 'hidden')} />
 
-      {active && !paused && (
-        <p className="mt-3 text-sm text-gray-600">Skieruj kamerę na kod QR klienta.</p>
-      )}
-      {active && paused && (
-        <p className="mt-3 text-sm text-gray-600">Potwierdzam odbiór…</p>
-      )}
+      {active && <p className="mt-3 text-sm text-ink-muted">{paused ? pausedLabel : 'Skieruj kamerę na kod QR klienta.'}</p>}
 
       {error && (
-        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div role="alert" className="rounded-ui-md border border-warning/30 bg-warning-soft px-3.5 py-3 text-sm text-warning">
           {error}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

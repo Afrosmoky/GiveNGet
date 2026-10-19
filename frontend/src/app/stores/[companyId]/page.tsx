@@ -194,16 +194,9 @@ function StorePageContent() {
             Ten sklep nie ma teraz aktywnych ofert. Zajrzyj później.
           </p>
         ) : (
-          <div className="grid grid-cols-2 justify-items-center gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4">
             {offers.map((offer) => (
-              <OfferTile
-                key={offer.id}
-                {...offer}
-                width={156}
-                height={220}
-                imageWidth={136}
-                hideStoreLink
-              />
+              <OfferTile key={offer.id} {...offer} hideStoreLink />
             ))}
           </div>
         )}

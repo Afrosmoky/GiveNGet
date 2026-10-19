@@ -6,6 +6,8 @@ import { authorizedFetch } from '../utils/auth';
 import { describeApiError } from '../utils/apiErrors';
 import { Reservation, formatDateTime } from '../types/reservation';
 import PickupCodeCard from './PickupCodeCard';
+import { LuCheck, LuMinus, LuPlus } from 'react-icons/lu';
+import { Button, Card, StatusPill } from './ui';
 
 interface ReserveOfferPanelProps {
   offerId: string;
@@ -72,56 +74,65 @@ export default function ReserveOfferPanel({
   // Po udanej rezerwacji pokazujemy kod odbioru zamiast formularza
   if (reservation) {
     return (
-      <div className="rounded-lg border border-green-200 bg-white p-4 shadow-sm sm:p-6">
-        <h3 className="mb-1 text-lg font-bold text-gray-900">Zarezerwowano</h3>
-        <p className="mb-4 text-sm text-gray-600">
-          {reservation.quantity === 1
-            ? '1 sztuka czeka na Ciebie.'
-            : `${reservation.quantity} sztuki czekają na Ciebie.`}{' '}
-          Odbierz do <span className="font-semibold">{formatDateTime(reservation.expiresAt)}</span>.
-        </p>
+      <Card padding="lg" className="border-brand/30">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
+            <LuCheck size={18} aria-hidden />
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-ink">Zarezerwowano</h3>
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {reservation.quantity === 1
+                ? '1 sztuka czeka na Ciebie.'
+                : `${reservation.quantity} sztuki czekają na Ciebie.`}{' '}
+              Odbierz do <span className="font-semibold text-ink">{formatDateTime(reservation.expiresAt)}</span>.
+            </p>
+          </div>
+        </div>
 
         <PickupCodeCard pickupCode={reservation.pickupCode} qrPayload={reservation.qrPayload} />
 
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <a
-            href="/reservations"
-            className="flex-1 rounded-lg bg-yellow-400 px-4 py-3 text-center font-bold text-gray-900 transition hover:bg-yellow-500"
-          >
+        {/* Zawsze w kolumnie — panel żyje w wąskiej kolumnie szczegółów także na desktopie */}
+        <div className="mt-4 flex flex-col gap-2">
+          <Button href="/reservations" size="lg" fullWidth>
             Moje rezerwacje
-          </a>
+          </Button>
           {available > 0 && (
-            <button
-              type="button"
-              onClick={() => setReservation(null)}
-              className="flex-1 rounded-lg border-2 border-gray-200 px-4 py-3 font-semibold text-gray-700 transition hover:bg-gray-50"
-            >
+            <Button variant="secondary" size="lg" fullWidth onClick={() => setReservation(null)}>
               Zarezerwuj więcej
-            </button>
+            </Button>
           )}
         </div>
-      </div>
+      </Card>
     );
   }
 
+  const stepperButton =
+    'flex h-12 w-12 shrink-0 items-center justify-center rounded-ui-md border border-line bg-surface text-ink transition-colors ' +
+    'hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:cursor-not-allowed disabled:opacity-40';
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-      <div className="mb-4 flex items-baseline justify-between gap-2">
-        <h3 className="text-lg font-bold text-gray-900">Rezerwacja</h3>
-        <span className={`text-sm font-semibold ${soldOut ? 'text-red-600' : 'text-gray-700'}`}>
-          {soldOut
-            ? 'Brak dostępności'
-            : `Dostępne: ${available}${totalQuantity ? ` z ${totalQuantity}` : ''} szt.`}
-        </span>
+    <Card padding="lg">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-ink">Rezerwacja</h3>
+        {soldOut ? (
+          <StatusPill status="soldout" size="md" />
+        ) : (
+          <StatusPill
+            status="remaining"
+            size="md"
+            label={`Zostało ${available}${totalQuantity ? ` z ${totalQuantity}` : ''}`}
+          />
+        )}
       </div>
 
       {soldOut ? (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-ink-muted">
           Wszystkie sztuki z tej oferty są już zarezerwowane lub odebrane.
         </p>
       ) : (
         <>
-          <label htmlFor="reserve-quantity" className="mb-2 block text-sm font-semibold text-gray-700">
+          <label htmlFor="reserve-quantity" className="mb-1.5 block text-sm font-medium text-ink">
             Liczba sztuk
           </label>
           <div className="mb-4 flex items-stretch gap-2">
@@ -130,9 +141,9 @@ export default function ReserveOfferPanel({
               aria-label="Zmniejsz liczbę sztuk"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1 || submitting}
-              className="w-12 rounded-lg border-2 border-gray-200 text-xl font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={stepperButton}
             >
-              −
+              <LuMinus size={18} aria-hidden />
             </button>
             <input
               id="reserve-quantity"
@@ -150,35 +161,30 @@ export default function ReserveOfferPanel({
                 setQuantity(Math.min(Math.max(parsed, 1), available));
               }}
               disabled={submitting}
-              className="min-w-0 flex-1 rounded-lg border-2 border-gray-200 p-3 text-center text-lg font-semibold transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
+              className="h-12 min-w-0 flex-1 rounded-ui-md border border-line bg-surface text-center text-lg font-semibold text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             />
             <button
               type="button"
               aria-label="Zwiększ liczbę sztuk"
               onClick={() => setQuantity((q) => Math.min(available, q + 1))}
               disabled={quantity >= available || submitting}
-              className="w-12 rounded-lg border-2 border-gray-200 text-xl font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className={stepperButton}
             >
-              +
+              <LuPlus size={18} aria-hidden />
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleReserve}
-            disabled={submitting}
-            className="w-full rounded-lg bg-yellow-400 py-3 font-bold text-gray-900 transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <Button size="lg" fullWidth onClick={handleReserve} loading={submitting}>
             {submitting ? 'Rezerwuję…' : 'Rezerwuj'}
-          </button>
+          </Button>
         </>
       )}
 
       {error && (
-        <div role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div role="alert" className="mt-3 rounded-ui-md border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger">
           {error}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

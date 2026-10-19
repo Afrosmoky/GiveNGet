@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { LuCircleAlert, LuCloud, LuLeaf, LuPackageCheck, LuScale } from 'react-icons/lu';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserData, isAuthenticated } from '../../../utils/auth';
+import { authorizedFetch, getUserData } from '../../../utils/auth';
+import { useRoleGate } from '../../../hooks/useRoleGate';
+import { Badge, Button, Card, CardHeader, Chip, Input, MetricCard, PageHeader, Spinner, consolePage } from '../../../components/ui';
 import { describeApiError } from '../../../utils/apiErrors';
 import {
   SavingsReport,
@@ -14,41 +16,26 @@ import {
   monthRange,
 } from '../../../types/report';
 
-/** Role dopuszczone do raportu — zgodnie z regułą /api/v1/reports/**. */
-const ALLOWED_USER_TYPES = ['COMPANY', 'ADMIN'] as const;
-
-type Authorization = 'checking' | 'granted' | 'denied';
+type Preset = 'current' | 'previous' | 'all' | null;
 
 export default function SavingsReportPage() {
-  const router = useRouter();
-  const [authorization, setAuthorization] = useState<Authorization>('checking');
+  // Raport dla firmy i admina — zgodnie z regułą /api/v1/reports/**
+  const authorization = useRoleGate(['COMPANY', 'ADMIN']);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [storeId, setStoreId] = useState('');
+  const [preset, setPreset] = useState<Preset>('all');
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const [report, setReport] = useState<SavingsReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Bramka roli: AuthGuard zna tylko fakt zalogowania, więc rolę sprawdzamy tutaj
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setAuthorization('denied');
-      router.replace('/login');
-      return;
-    }
-    const userType = getUserData()?.userType;
-    if (!userType || !ALLOWED_USER_TYPES.includes(userType as (typeof ALLOWED_USER_TYPES)[number])) {
-      setAuthorization('denied');
-      router.replace('/unauthorized');
-      return;
-    }
-    setIsPlatformAdmin(userType === 'ADMIN');
-    setAuthorization('granted');
-  }, [router]);
+    if (authorization === 'granted') setIsPlatformAdmin(getUserData()?.userType === 'ADMIN');
+  }, [authorization]);
 
   const loadReport = useCallback(
     async (rangeFrom: string, rangeTo: string, narrowToStore: string) => {
@@ -96,14 +83,15 @@ export default function SavingsReportPage() {
     void loadReport(nextFrom, nextTo, storeId);
   };
 
-  const applyPreset = (preset: 'current' | 'previous' | 'all') => {
-    if (preset === 'all') {
+  const applyPreset = (next: Exclude<Preset, null>) => {
+    setPreset(next);
+    if (next === 'all') {
       setFrom('');
       setTo('');
       submitFilters('', '');
       return;
     }
-    const { from: presetFrom, to: presetTo } = monthRange(preset === 'current' ? 0 : 1);
+    const { from: presetFrom, to: presetTo } = monthRange(next === 'current' ? 0 : 1);
     setFrom(presetFrom);
     setTo(presetTo);
     submitFilters(presetFrom, presetTo);
@@ -111,95 +99,60 @@ export default function SavingsReportPage() {
 
   if (authorization !== 'granted') {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center px-4">
-        <p className="text-gray-600">
-          {authorization === 'checking' ? 'Sprawdzanie uprawnień…' : 'Brak dostępu do tego raportu.'}
-        </p>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Spinner label="Sprawdzanie uprawnień" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">Raport oszczędności</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Ile towaru udało się uratować — liczone z potwierdzonych odbiorów.
-        </p>
-      </header>
+    <div className={consolePage}>
+      <PageHeader title="Raport oszczędności" description="Ile towaru udało się uratować — liczone z potwierdzonych odbiorów." />
 
       {/* Filtr */}
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+      <Card className="mb-6">
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            setPreset(null);
             submitFilters(from, to);
           }}
         >
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label htmlFor="report-from" className="mb-1 block text-sm font-semibold text-gray-700">
-                Od
-              </label>
-              <input
-                id="report-from"
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(e) => setFrom(e.target.value)}
-                className="w-full rounded-lg border-2 border-gray-200 p-2.5 text-base transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
-              />
-            </div>
-            <div>
-              <label htmlFor="report-to" className="mb-1 block text-sm font-semibold text-gray-700">
-                Do
-              </label>
-              <input
-                id="report-to"
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-full rounded-lg border-2 border-gray-200 p-2.5 text-base transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
-              />
-            </div>
-
-            {isPlatformAdmin && (
-              <div>
-                <label htmlFor="report-store" className="mb-1 block text-sm font-semibold text-gray-700">
-                  ID sklepu <span className="font-normal text-gray-500">(opcjonalnie)</span>
-                </label>
-                <input
-                  id="report-store"
-                  type="number"
-                  min={1}
-                  value={storeId}
-                  onChange={(e) => setStoreId(e.target.value)}
-                  placeholder="cała platforma"
-                  className="w-full rounded-lg border-2 border-gray-200 p-2.5 text-base transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
-                />
-              </div>
-            )}
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-lg bg-yellow-400 px-4 py-2.5 font-bold text-gray-900 transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? 'Liczę…' : 'Pokaż raport'}
-              </button>
-            </div>
+          <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Szybki wybór okresu">
+            <Chip selected={preset === 'current'} onClick={() => applyPreset('current')} disabled={loading}>
+              Ten miesiąc
+            </Chip>
+            <Chip selected={preset === 'previous'} onClick={() => applyPreset('previous')} disabled={loading}>
+              Poprzedni miesiąc
+            </Chip>
+            <Chip selected={preset === 'all'} onClick={() => applyPreset('all')} disabled={loading}>
+              Cały okres
+            </Chip>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <PresetButton label="Ten miesiąc" onClick={() => applyPreset('current')} disabled={loading} />
-            <PresetButton label="Poprzedni miesiąc" onClick={() => applyPreset('previous')} disabled={loading} />
-            <PresetButton label="Cały okres" onClick={() => applyPreset('all')} disabled={loading} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <Input id="report-from" label="Od" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+            <Input id="report-to" label="Do" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+            {isPlatformAdmin && (
+              <Input
+                id="report-store"
+                label={<>ID sklepu <span className="font-normal text-ink-subtle">(opcjonalnie)</span></>}
+                type="number"
+                min={1}
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+                placeholder="cała platforma"
+              />
+            )}
+            <div className="col-span-2 flex items-end lg:col-span-1">
+              <Button type="submit" fullWidth loading={loading}>
+                {loading ? 'Liczę…' : 'Pokaż raport'}
+              </Button>
+            </div>
           </div>
 
           {rangeError && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
+            <p role="alert" className="mt-3 text-sm text-danger">
               {rangeError}
             </p>
           )}
@@ -207,28 +160,27 @@ export default function SavingsReportPage() {
 
         {/* Bez tej adnotacji właściciel sklepu porówna raport z utargiem i zobaczy
             rozbieżność bez wyjaśnienia — doba UTC kończy się w Polsce o 01:00–02:00. */}
-        <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          Zakres jest liczony w dniach UTC, więc doba raportu kończy się w Polsce około 1:00–2:00
-          następnego dnia.
+        <p className="mt-4 border-t border-line pt-3 text-xs text-ink-subtle">
+          Zakres jest liczony w dniach UTC, więc doba raportu kończy się w Polsce około 1:00–2:00 następnego dnia.
         </p>
-      </section>
+      </Card>
 
       {loading && !report && <LoadingState />}
 
       {error && (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-sm text-red-700">{error}</p>
-          <button
-            type="button"
-            onClick={() => submitFilters(from, to)}
-            className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-          >
+        <Card role="alert" className="flex flex-col items-start gap-3 border-danger/30 bg-danger-soft">
+          <p className="flex items-center gap-2 text-sm text-danger">
+            <LuCircleAlert size={16} aria-hidden /> {error}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => submitFilters(from, to)}>
             Spróbuj ponownie
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {!error && report && <ReportBody report={report} dimmed={loading} />}
+
+      {!error && report && <MonthlyTable storeId={isPlatformAdmin ? storeId : ''} />}
     </div>
   );
 }
@@ -237,18 +189,16 @@ function ReportBody({ report, dimmed }: { report: SavingsReport; dimmed: boolean
   const hasCollections = report.savedProductsCount > 0;
 
   return (
-    <div className={dimmed ? 'opacity-60' : ''}>
-      <p className="mb-4 text-sm text-gray-600">
-        Zakres: <span className="font-semibold text-gray-900">{describeRange(report.from, report.to)}</span>
-        {report.storeId !== null && (
-          <>
-            {' · '}Sklep: <span className="font-semibold text-gray-900">#{report.storeId}</span>
-          </>
-        )}
-        {report.storeId === null && (
-          <>
-            {' · '}<span className="font-semibold text-gray-900">cała platforma</span>
-          </>
+    <div className={dimmed ? 'opacity-60 transition-opacity' : undefined}>
+      <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+        Zakres: <span className="font-semibold text-ink">{describeRange(report.from, report.to)}</span>
+        <span aria-hidden>·</span>
+        {report.storeId !== null ? (
+          <span>
+            Sklep <span className="font-semibold text-ink">#{report.storeId}</span>
+          </span>
+        ) : (
+          <span className="font-semibold text-ink">cała platforma</span>
         )}
       </p>
 
@@ -256,39 +206,28 @@ function ReportBody({ report, dimmed }: { report: SavingsReport; dimmed: boolean
         <EmptyState />
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricTile
-              label="Uratowane sztuki"
-              value={formatCount(report.savedProductsCount)}
-              unit="szt."
-              tone="green"
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <MetricCard label="Uratowane sztuki" value={formatCount(report.savedProductsCount)} unit="szt." icon={<LuPackageCheck size={18} />} />
+            <MetricCard
+              label="Wartość towaru"
+              value={report.valueByCurrency.length > 0 ? formatMoney(report.valueByCurrency[0].amount, report.valueByCurrency[0].currency) : '—'}
+              hint={report.valueByCurrency.length > 1 ? `+ ${report.valueByCurrency.length - 1} inne waluty niżej` : report.valueByCurrency.length === 0 ? 'oferty bez ceny' : undefined}
+              icon={<LuLeaf size={18} />}
             />
-            <MetricTile
-              label="Szacowana masa"
-              value={formatEstimate(report.estimatedKg)}
-              unit="kg"
-              tone="blue"
-              estimated
-            />
-            <MetricTile
-              label="Szacowany ekwiwalent CO₂"
-              value={formatEstimate(report.estimatedCo2Kg)}
-              unit="kg CO₂"
-              tone="blue"
-              estimated
-            />
+            <MetricCard label="Szacowana masa" value={formatEstimate(report.estimatedKg)} unit="kg" icon={<LuScale size={18} />} hint={report.estimated ? 'szacunek' : undefined} />
+            <MetricCard label="Ekwiwalent CO₂" value={formatEstimate(report.estimatedCo2Kg)} unit="kg" icon={<LuCloud size={18} />} hint={report.estimated ? 'szacunek' : undefined} />
           </div>
 
           {report.estimated && (
-            <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-              <strong>Masa i CO₂ to przybliżenie.</strong> Liczymy je stałym mnożnikiem na sztukę,
-              jednakowym dla każdego produktu — bułka waży w tym rachunku tyle samo, co zgrzewka wody.
-              Liczba uratowanych sztuk i wartość są policzone dokładnie. Nie używaj tych dwóch liczb
-              jako wskaźnika ESG bez zastrzeżenia.
+            <p className="mt-4 rounded-ui-md border border-line bg-surface-muted px-3 py-2.5 text-xs leading-5 text-ink-muted">
+              <Badge tone="neutral" className="mr-1.5 align-middle">szacunek</Badge>
+              <strong className="font-semibold text-ink">Masa i CO₂ to przybliżenie.</strong> Liczymy je stałym mnożnikiem
+              na sztukę, jednakowym dla każdego produktu — bułka waży w tym rachunku tyle samo, co zgrzewka wody. Liczba
+              uratowanych sztuk i wartość są policzone dokładnie. Nie używaj tych dwóch liczb jako wskaźnika ESG bez zastrzeżenia.
             </p>
           )}
 
-          <ValueSection report={report} />
+          {report.valueByCurrency.length > 1 && <ValueSection report={report} />}
         </>
       )}
     </div>
@@ -297,88 +236,106 @@ function ReportBody({ report, dimmed }: { report: SavingsReport; dimmed: boolean
 
 function ValueSection({ report }: { report: SavingsReport }) {
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-      <h2 className="text-lg font-bold text-gray-900">Wartość uratowanego towaru</h2>
-
-      {report.valueByCurrency.length === 0 ? (
-        // Pusta wartość przy niezerowej liczbie sztuk to konkretna przyczyna,
-        // a nie „brak danych" — mówimy ją wprost
-        <p className="mt-2 text-sm text-gray-600">
-          Brak wartości do policzenia: odebrane oferty nie mają ustawionej ceny. Liczba sztuk oraz
-          szacunki masy i CO₂ powyżej są policzone normalnie.
-        </p>
-      ) : (
-        <>
-          <ul className="mt-3 divide-y divide-gray-100">
-            {report.valueByCurrency.map((entry) => (
-              <li key={entry.currency} className="flex items-baseline justify-between gap-4 py-2">
-                <span className="text-sm font-semibold text-gray-600">{entry.currency}</span>
-                <span className="text-xl font-extrabold text-gray-900">
-                  {formatMoney(entry.amount, entry.currency)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {report.valueByCurrency.length > 1 && (
-            <p className="mt-3 text-xs text-gray-500">
-              Waluty pokazujemy osobno — nie przeliczamy ich na jedną, bo raport nie zna kursów.
-            </p>
-          )}
-        </>
-      )}
-    </section>
+    <Card className="mt-4">
+      <CardHeader
+        title="Wartość według waluty"
+        description="Waluty pokazujemy osobno — nie przeliczamy ich na jedną, bo raport nie zna kursów."
+      />
+      <ul className="divide-y divide-line">
+        {report.valueByCurrency.map((entry) => (
+          <li key={entry.currency} className="flex items-baseline justify-between gap-4 py-2">
+            <span className="text-sm font-medium text-ink-muted">{entry.currency}</span>
+            <span className="text-lg font-semibold tabular-nums text-ink">{formatMoney(entry.amount, entry.currency)}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
-function MetricTile({
-  label,
-  value,
-  unit,
-  tone,
-  estimated = false,
-}: {
-  label: string;
-  value: string;
-  unit: string;
-  tone: 'green' | 'blue';
-  estimated?: boolean;
-}) {
-  const toneClasses =
-    tone === 'green' ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50';
-  const valueClasses = tone === 'green' ? 'text-green-900' : 'text-blue-900';
+/**
+ * Ostatnie miesiące w tabeli. Każdy wiersz to osobne zapytanie o raport za miesiąc — liczy
+ * backend (te same reguły co kafelki wyżej), front tylko układa wyniki obok siebie.
+ */
+const MONTHS_BACK = 6;
+
+function MonthlyTable({ storeId }: { storeId: string }) {
+  const [rows, setRows] = useState<{ label: string; report: SavingsReport | null }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const months = Array.from({ length: MONTHS_BACK }, (_, i) => i);
+      const results = await Promise.all(
+        months.map(async (monthsAgo) => {
+          const range = monthRange(monthsAgo);
+          const params = new URLSearchParams({ from: range.from, to: range.to });
+          if (storeId.trim()) params.set('storeId', storeId.trim());
+          const label = new Date(`${range.from}T00:00:00`).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
+          try {
+            const response = await authorizedFetch(`${environment.apiUrl}/api/v1/reports/savings?${params}`);
+            return { label, report: response.ok ? ((await response.json()) as SavingsReport) : null };
+          } catch {
+            return { label, report: null };
+          }
+        })
+      );
+      if (!cancelled) setRows(results);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
 
   return (
-    <div className={`rounded-lg border p-4 ${toneClasses}`}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-gray-700">{label}</p>
-        {estimated && (
-          <span className="shrink-0 rounded-full border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-800">
-            szacunek
-          </span>
-        )}
+    <Card padding="none" className="mt-6 overflow-hidden">
+      <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+        <CardHeader title="Ostatnie miesiące" description="Potwierdzone odbiory miesiąc po miesiącu." className="mb-3" />
       </div>
-      <p className={`mt-2 text-3xl font-extrabold ${valueClasses}`}>
-        {value} <span className="text-base font-bold">{unit}</span>
-      </p>
-    </div>
+      {rows === null ? (
+        <div className="space-y-2 px-4 pb-4 sm:px-5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-9 animate-pulse rounded-ui-sm bg-surface-sunken" />
+          ))}
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-y border-line bg-surface-muted text-left text-xs uppercase tracking-wide text-ink-subtle">
+              <th className="px-4 py-2 font-medium sm:px-5">Miesiąc</th>
+              <th className="px-3 py-2 text-right font-medium">Sztuki</th>
+              <th className="px-3 py-2 text-right font-medium">Wartość</th>
+              <th className="hidden px-4 py-2 text-right font-medium sm:table-cell sm:px-5">Masa (szac.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ label, report }) => (
+              <tr key={label} className="border-b border-line last:border-0">
+                <td className="px-4 py-2.5 capitalize text-ink sm:px-5">{label}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ink">{report ? formatCount(report.savedProductsCount) : '—'}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-ink-muted">
+                  {report && report.valueByCurrency.length > 0
+                    ? report.valueByCurrency.map((v) => formatMoney(v.amount, v.currency)).join(' + ')
+                    : '—'}
+                </td>
+                <td className="hidden px-4 py-2.5 text-right tabular-nums text-ink-muted sm:table-cell sm:px-5">
+                  {report ? `${formatEstimate(report.estimatedKg)} kg` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }
 
 function LoadingState() {
   return (
-    <div aria-busy="true" aria-live="polite">
-      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="animate-pulse rounded-lg border border-gray-200 bg-white p-4">
-            <div className="h-4 w-2/3 rounded bg-gray-200" />
-            <div className="mt-3 h-9 w-1/2 rounded bg-gray-200" />
-          </div>
-        ))}
-      </div>
-      <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-5">
-        <div className="h-5 w-1/3 rounded bg-gray-200" />
-        <div className="mt-4 h-6 w-1/4 rounded bg-gray-200" />
-      </div>
+    <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-28 animate-pulse rounded-ui-xl bg-surface-sunken" />
+      ))}
       <span className="sr-only">Liczenie raportu…</span>
     </div>
   );
@@ -386,33 +343,12 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <div className="rounded-lg border-2 border-dashed border-gray-200 bg-white p-8 text-center">
-      <h2 className="text-lg font-bold text-gray-900">Brak potwierdzonych odbiorów</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-gray-600">
-        W wybranym zakresie nie potwierdzono żadnego odbioru. Do raportu wliczają się wyłącznie
-        rezerwacje odebrane w sklepie — rezerwacje oczekujące, anulowane i wygasłe nie.
+    <Card className="border-dashed text-center">
+      <h2 className="text-base font-semibold text-ink">Brak potwierdzonych odbiorów</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
+        W wybranym zakresie nie potwierdzono żadnego odbioru. Do raportu wliczają się wyłącznie rezerwacje odebrane
+        w sklepie — rezerwacje oczekujące, anulowane i wygasłe nie.
       </p>
-    </div>
-  );
-}
-
-function PresetButton({
-  label,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-full border-2 border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {label}
-    </button>
+    </Card>
   );
 }

@@ -13,6 +13,10 @@ export interface OfferDetails {
   updatedAt: string;
   price: number;
   currency: string;
+  /** Cena przed obniżką; null = bez przeceny. */
+  originalPrice?: number | null;
+  /** Rabat w % wyliczony w backendzie; null = bez badge'a. */
+  discountPercent?: number | null;
   location: string;
   latitude: number;
   longitude: number;

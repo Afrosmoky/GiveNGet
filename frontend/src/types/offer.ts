@@ -54,10 +54,10 @@ export const RANK_REQUIREMENTS: Record<UserRank, { minRating: number; minTrustPo
 export const RANK_BENEFITS: Record<UserRank, string[]> = {
   STARTER: [
     '5 darmowych ofert miesięcznie',
-    'Podstawowa widoczność ogłoszeń'
+    'Podstawowa widoczność ofert'
   ],
   RELIABLE_SELLER: [
-    'Większa widoczność ogłoszeń',
+    'Większa widoczność ofert',
     '+5 darmowych ofert (10 łącznie)',
     'Priorytet w wynikach wyszukiwania'
   ],
@@ -100,6 +100,23 @@ export interface ApiOffer {
   recommended?: boolean;
   categoryId?: number;
   subcategoryId?: number;
+  sellerId?: number;
+  sellerType?: 'REGULAR' | 'COMPANY' | string;
+  storeName?: string | null;
+  /** Cena za sztukę; null dla ofert darmowych i wymian. */
+  price?: number | null;
+  /** Waluta ceny (ISO 4217); null gdy brak ceny. */
+  currency?: string | null;
+  /** Cena przed obniżką; null = bez przeceny. */
+  originalPrice?: number | null;
+  /** Rabat w % wyliczony w backendzie; null = bez badge'a. */
+  discountPercent?: number | null;
+  /** Liczba sztuk wystawionych przez sprzedawcę. */
+  quantity?: number | null;
+  /** Sztuki do zarezerwowania — wyliczane w backendzie (quantity minus aktywne rezerwacje). */
+  availableQuantity?: number | null;
+  /** Koniec okna odbioru, "HH:mm". */
+  pickupDateTo?: string | null;
 }
 
 export interface OfferTile {
@@ -122,6 +139,20 @@ export interface OfferTile {
   sellerType?: 'REGULAR' | 'COMPANY' | string;
   /** Nazwa firmy; wypełniana tylko dla sprzedawcy COMPANY. */
   storeName?: string | null;
+  /** Cena za sztukę; null dla ofert darmowych i wymian. */
+  price?: number | null;
+  /** Waluta ceny (ISO 4217); null gdy brak ceny. */
+  currency?: string | null;
+  /** Cena przed obniżką; null = bez przeceny. */
+  originalPrice?: number | null;
+  /** Rabat w % wyliczony w backendzie; null = bez badge'a. */
+  discountPercent?: number | null;
+  /** Liczba sztuk wystawionych przez sprzedawcę. */
+  quantity?: number | null;
+  /** Sztuki do zarezerwowania — wyliczane w backendzie (quantity minus aktywne rezerwacje). */
+  availableQuantity?: number | null;
+  /** Koniec okna odbioru, "HH:mm". */
+  pickupDateTo?: string | null;
 }
 
 export interface OfferTileProps extends OfferTile {

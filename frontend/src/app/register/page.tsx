@@ -1,150 +1,116 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FaLocationCrosshairs } from 'react-icons/fa6';
+import type { IconType } from 'react-icons';
+import { LuBuilding2, LuChartColumn, LuLeaf, LuLock, LuMail, LuMapPin, LuPhone, LuQrCode, LuUpload, LuUser } from 'react-icons/lu';
 import { environment } from '../../config';
 import { AuthGuard } from '../../components/AuthGuard';
 import LocationMapModal from '../../components/LocationMapModal';
+import { AuthNotice, authLinkClass } from '../../components/auth/AuthCard';
+import { CONSENT_REQUIRED_MESSAGE, ConsentCheckbox } from '../../components/auth/register/ConsentCheckbox';
+import { LocationField, type LocationSuggestion } from '../../components/auth/register/LocationField';
+import { PhotoDropzone } from '../../components/auth/register/PhotoDropzone';
+import { Button, Card, Chip, Input, Textarea, cn, pageContainer } from '../../components/ui';
 import { describeApiError } from '../../utils/apiErrors';
 
 // Typy rejestracji
 type RegistrationType = 'user' | 'company';
 
-// Interfejs dla sugestii lokalizacji
-interface LocationSuggestion {
-    country: string;
-    country_code: string;
-    state: string;
-    county: string | null;
-    city: string;
-    lon: number;
-    lat: number;
-    formatted: string;
-}
+/** Co daje konto — tylko funkcje, które już działają (rezerwacje, kod odbioru, import, raport). */
+const BENEFITS: Record<RegistrationType, { icon: IconType; text: string }[]> = {
+  user: [
+    { icon: LuMapPin, text: 'Oferty sklepów, piekarni i sąsiadów z Twojej okolicy' },
+    { icon: LuQrCode, text: 'Rezerwujesz w aplikacji, odbierasz osobiście z kodem' },
+    { icon: LuLeaf, text: 'Płacisz mniej albo nic, a jedzenie nie ląduje w koszu' },
+  ],
+  company: [
+    { icon: LuUpload, text: 'Wystawiasz nadwyżki w kilka minut — pojedynczo albo importem z Excela' },
+    { icon: LuQrCode, text: 'Pracownicy potwierdzają odbiór kodem rezerwacji' },
+    { icon: LuChartColumn, text: 'Raport pokazuje, ile jedzenia udało się uratować' },
+  ],
+};
 
-const CONSENT_REQUIRED_MESSAGE = 'Aby założyć konto, zaakceptuj regulamin i politykę prywatności.';
-
-/**
- * Obowiązkowa zgoda przy rejestracji (docs/08, pozycja 2). Jeden checkbox obejmuje regulamin
- * i politykę prywatności; backend zapisuje je osobno i sam egzekwuje (CONSENT_REQUIRED).
- * Linki otwierają się w nowej karcie, żeby nie zgubić wypełnionego formularza.
- */
-function ConsentCheckbox({ checked, error, onChange }: { checked: boolean; error: string; onChange: (checked: boolean) => void }) {
-  return (
-    <div className="mb-5">
-      <label htmlFor="consent" className="flex cursor-pointer items-start gap-3 text-sm text-gray-700">
-        <input
-          id="consent"
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          aria-invalid={error !== ''}
-          aria-describedby={error ? 'consent-error' : undefined}
-          className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-gray-300 accent-yellow-400"
-        />
-        <span>
-          Akceptuję{' '}
-          <Link href="/static-content/terms-of-service" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-gray-900">
-            regulamin
-          </Link>{' '}
-          i{' '}
-          <Link href="/static-content/privacy-policy" target="_blank" rel="noopener noreferrer" className="font-semibold underline hover:text-gray-900">
-            politykę prywatności
-          </Link>
-          . <span className="text-red-600" aria-hidden="true">*</span>
-        </span>
-      </label>
-      {error && (
-        <div id="consent-error" role="alert" className="mt-1 text-xs text-red-600">
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
+const REGISTRATION_TYPES: { value: RegistrationType; label: string; icon: React.ReactNode }[] = [
+  { value: 'user', label: 'Osoba prywatna', icon: <LuUser size={16} aria-hidden /> },
+  { value: 'company', label: 'Firma / sklep', icon: <LuBuilding2 size={16} aria-hidden /> },
+];
 
 function RegisterPageContent() {
   const router = useRouter();
   const [registrationType, setRegistrationType] = useState<RegistrationType>('user');
 
+  // /register?type=company (np. z „Załóż konto firmy” na stronie głównej) otwiera formularz firmy
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('type') === 'company') {
+      setRegistrationType('company');
+    }
+  }, []);
+
+  const benefits = BENEFITS[registrationType];
+  const loginLink = (
+    <p className="text-sm text-ink-muted">
+      Masz już konto?{' '}
+      <Link href="/login" className={authLinkClass}>
+        Zaloguj się
+      </Link>
+    </p>
+  );
+
   return (
-          <div className="page-container">
-      <div 
-        className="form-container-wide"
-        style={{
-          maxWidth: registrationType === 'user' ? '500px' : '600px',
-          transition: 'max-width 0.3s ease'
-        }}
-      >
-        {/* Obrazek courier - nad logiem */}
-        <div style={{
-          width: '100%',
-          marginTop: '20px',
-          marginBottom: '20px',
-          padding: '0'
-        }}>
-          <Image
-            src="/images/courier.svg"
-            alt="Courier"
-            width={500}
-            height={150}
-            style={{ 
-              objectFit: 'contain', 
-              width: '100%', 
-              height: 'auto',
-              display: 'block'
-            }}
-          />
+    <div className={cn(pageContainer, 'py-8 sm:py-12')}>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12">
+        {/* Wprowadzenie — na desktopie przyklejone obok długiego formularza */}
+        <div className="lg:sticky lg:top-[calc(var(--shell-topbar-h)+2rem)] lg:self-start lg:pt-2">
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Załóż konto</h1>
+          <p className="mt-2 max-w-md text-sm leading-6 text-ink-muted sm:text-base">
+            {registrationType === 'user'
+              ? 'Rezerwuj jedzenie z okolicy taniej albo za darmo i oddawaj to, czego nie zjesz.'
+              : 'Sprzedawaj nadwyżki zamiast je wyrzucać. Rejestracja sklepu zajmuje dwa kroki.'}
+          </p>
+          <ul className="mt-6 hidden space-y-3 lg:block">
+            {benefits.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-start gap-3 text-sm text-ink">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-ui-sm bg-brand-soft text-brand" aria-hidden>
+                  <Icon size={16} />
+                </span>
+                <span className="pt-1.5">{text}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8 hidden lg:block">{loginLink}</div>
         </div>
 
-        {/* Logo na górze */}
-        <div className="flex justify-center mt-4 mb-5">
-          <Image
-            src="/images/logo.png"
-            alt="ELocApp Logo"
-            width={200}
-            height={100}
-            style={{ objectFit: 'contain' }}
-          />
-        </div>
+        <div>
+          <Card padding="none" className="p-5 sm:p-8">
+            {/* Przełącznik typu rejestracji */}
+            <div role="tablist" aria-label="Typ konta" className="mb-6 grid grid-cols-2 gap-1 rounded-ui-md bg-surface-sunken p-1">
+              {REGISTRATION_TYPES.map(type => {
+                const active = registrationType === type.value;
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setRegistrationType(type.value)}
+                    className={cn(
+                      'inline-flex h-10 items-center justify-center gap-2 rounded-ui-sm text-sm font-semibold transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
+                      active ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink'
+                    )}
+                  >
+                    {type.icon}
+                    {type.label}
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Przełącznik typu rejestracji */}
-        <div className="btn-toggle-container mb-8 px-10">
-          <button
-            onClick={() => setRegistrationType('user')}
-            className={`btn-toggle ${registrationType === 'user' ? 'active' : 'inactive'}`}
-          >
-            Rejestracja użytkownika
-          </button>
-          <button
-            onClick={() => setRegistrationType('company')}
-            className={`btn-toggle ${registrationType === 'company' ? 'active' : 'inactive'}`}
-          >
-            Rejestracja firmy
-          </button>
-        </div>
-
-        {/* Zawartość formularza */}
-        <div className="px-10 pb-10">
-          <div className="text-center mb-8 text-primary text-lg font-bold">
-            {registrationType === 'user' ? 'Rejestracja konta użytkownika' : 'Rejestracja konta firmy'}
-          </div>
-
-          {registrationType === 'user' ? <UserRegistrationForm router={router} /> : <CompanyRegistrationForm />}
-
-          {/* Link do logowania */}
-          <div className="text-center mt-5">
-            <Link
-              href="/login"
-              className="text-secondary text-sm"
-              style={{ textDecoration: 'none' }}
-            >
-              Masz już konto? Zaloguj się
-            </Link>
-          </div>
+            {registrationType === 'user' ? <UserRegistrationForm router={router} /> : <CompanyRegistrationForm />}
+          </Card>
+          <div className="mt-5 text-center lg:hidden">{loginLink}</div>
         </div>
       </div>
     </div>
@@ -509,402 +475,104 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
     }
   };
 
-  const getInputStyle = (fieldName: keyof typeof errors) => ({
-    width: '100%',
-    padding: '16px',
-    border: 'none',
-    borderBottom: `2px solid ${errors[fieldName] ? '#ef4444' : '#e2e8f0'}`,
-    fontSize: '16px',
-    backgroundColor: 'transparent',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-    color: '#2d3748'
-  });
-
-  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>, fieldName: keyof typeof errors) => {
-    if (!errors[fieldName]) {
-      e.target.style.borderBottomColor = '#fbbf24';
-    }
-  };
-
-  const handleDateInputMouseMove = (e: React.MouseEvent<HTMLInputElement>) => {
-    const input = e.target as HTMLInputElement;
-    const rect = input.getBoundingClientRect();
-    const iconStart = rect.right - 40; // Obszar 40px od prawej strony
-    const iconEnd = rect.right - 8;
-    const mouseX = e.clientX;
-
-    if (mouseX >= iconStart && mouseX <= iconEnd) {
-      input.classList.add('date-icon-hover');
-    } else {
-      input.classList.remove('date-icon-hover');
-    }
-  };
-
-  const handleDateInputMouseLeave = (e: React.MouseEvent<HTMLInputElement>) => {
-    const input = e.target as HTMLInputElement;
-    input.classList.remove('date-icon-hover');
-  };
+  // Zakres daty urodzenia: 13–100 lat (ta sama reguła co walidacja pola)
+  const dateLimits = (() => {
+    const today = new Date();
+    const max = new Date();
+    max.setFullYear(today.getFullYear() - 13);
+    const min = new Date();
+    min.setFullYear(today.getFullYear() - 100);
+    return { max: max.toISOString().split('T')[0], min: min.toISOString().split('T')[0] };
+  })();
 
   return (
-    <>
-      {/* Tekst motywacyjny dla rejestracji użytkownika */}
-      <div className="text-center mb-8 text-primary text-base">
-        Wymieniaj<br />
-        jedzenie!
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input label="Imię" name="firstName" autoComplete="given-name" value={formData.firstName} onChange={handleInputChange} onBlur={handleBlur} error={errors.firstName || undefined} />
+        <Input label="Nazwisko" name="lastName" autoComplete="family-name" value={formData.lastName} onChange={handleInputChange} onBlur={handleBlur} error={errors.lastName || undefined} />
       </div>
 
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="mb-5">
-          <label className="form-label">
-            Imię
-          </label>
-          <input
-            type="text"
-            name="firstName"
-            value={formData.firstName}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('firstName')}
-            onFocus={(e) => handleInputFocus(e, 'firstName')}
-          />
-          {errors.firstName && (
-            <div className="error-message">
-              {errors.firstName}
-            </div>
-          )}
-        </div>
+      <Input
+        label="Data urodzenia"
+        type="date"
+        name="dateOfBirth"
+        autoComplete="bday"
+        value={formData.dateOfBirth}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        max={dateLimits.max}
+        min={dateLimits.min}
+        error={errors.dateOfBirth || undefined}
+        hint="Musisz mieć co najmniej 13 lat."
+      />
 
-        <div className="mb-5">
-          <label className="form-label">
-            Nazwisko
-          </label>
-          <input
-            type="text"
-            name="lastName"
-            value={formData.lastName}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('lastName')}
-            onFocus={(e) => handleInputFocus(e, 'lastName')}
-          />
-          {errors.lastName && (
-            <div className="error-message">
-              {errors.lastName}
-            </div>
-          )}
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input label="E-mail" type="email" name="email" autoComplete="email" inputMode="email" value={formData.email} onChange={handleInputChange} onBlur={handleBlur} error={errors.email || undefined} leftIcon={<LuMail size={16} />} placeholder="ty@przyklad.pl" />
+        <Input label="Numer telefonu" type="tel" name="phoneNumber" autoComplete="tel" value={formData.phoneNumber} onChange={handleInputChange} onBlur={handleBlur} error={errors.phoneNumber || undefined} leftIcon={<LuPhone size={16} />} />
+      </div>
 
-        <div className="mb-5">
-          <label className="form-label">
-            Data urodzenia
-          </label>
-          <input
-            type="date"
-            name="dateOfBirth"
-            value={formData.dateOfBirth}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('dateOfBirth')}
-            onFocus={(e) => handleInputFocus(e, 'dateOfBirth')}
-            onMouseMove={handleDateInputMouseMove}
-            onMouseLeave={handleDateInputMouseLeave}
-            max={(() => {
-              const today = new Date();
-              const maxDate = new Date();
-              maxDate.setFullYear(today.getFullYear() - 13);
-              return maxDate.toISOString().split('T')[0];
-            })()}
-            min={(() => {
-              const today = new Date();
-              const minDate = new Date();
-              minDate.setFullYear(today.getFullYear() - 100);
-              return minDate.toISOString().split('T')[0];
-            })()}
-          />
-          {errors.dateOfBirth && (
-            <div className="error-message">
-              {errors.dateOfBirth}
-            </div>
-          )}
-        </div>
+      <Input label="Hasło" type="password" name="password" autoComplete="new-password" value={formData.password} onChange={handleInputChange} onBlur={handleBlur} error={errors.password || undefined} hint="Co najmniej 6 znaków." leftIcon={<LuLock size={16} />} />
 
-        <div className="mb-5">
-          <label className="form-label">
-            Email
-          </label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('email')}
-            onFocus={(e) => handleInputFocus(e, 'email')}
-          />
-          {errors.email && (
-            <div className="error-message">
-              {errors.email}
-            </div>
-          )}
-        </div>
+      <LocationField
+        value={formData.localization}
+        error={errors.localization}
+        searching={locationSearching}
+        suggestions={locationSuggestions}
+        showSuggestions={showLocationSuggestions}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        onSelectSuggestion={handleSuggestionSelect}
+        onOpenMap={() => setIsLocationModalOpen(true)}
+      />
 
-        <div className="mb-5">
-          <label className="form-label">
-            Numer telefonu
-          </label>
-          <input
-            type="tel"
-            name="phoneNumber"
-            value={formData.phoneNumber}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('phoneNumber')}
-            onFocus={(e) => handleInputFocus(e, 'phoneNumber')}
-          />
-          {errors.phoneNumber && (
-            <div className="error-message">
-              {errors.phoneNumber}
-            </div>
-          )}
-        </div>
+      <Textarea
+        label={<>Bio <span className="font-normal text-ink-subtle">(opcjonalnie)</span></>}
+        name="bio"
+        value={formData.bio}
+        onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+        placeholder="Opisz siebie w kilku słowach…"
+        rows={3}
+      />
 
-        <div className="mb-5">
-          <label className="form-label">
-            Hasło
-          </label>
-          <input
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('password')}
-            onFocus={(e) => handleInputFocus(e, 'password')}
-          />
-          {errors.password && (
-            <div className="error-message">
-              {errors.password}
-            </div>
-          )}
-        </div>
+      <PhotoDropzone
+        label="Zdjęcie profilowe"
+        changeLabel="Zmień zdjęcie"
+        file={formData.profilePhoto}
+        isDragOver={isDragOver}
+        inputRef={fileInputRef}
+        onFileChange={handleFileChange}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      />
 
-        <div className="mb-5">
-          <label className="form-label">
-            Lokalizacja
-          </label>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              name="localization"
-              value={formData.localization}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              placeholder="Wprowadź lokalizację lub kliknij ikonę GPS"
-              autoComplete="off"
-              className="form-input"
-              style={{
-                ...getInputStyle('localization'),
-                paddingRight: '50px' // Dodajemy padding po prawej dla ikony
-              }}
-              onFocus={(e) => handleInputFocus(e, 'localization')}
-            />
-            {locationSearching && (
-              <div style={{
-                position: 'absolute',
-                right: '44px',
-                top: '50%',
-                transform: 'translateY(-50%)'
-              }}>
-                <div className="loading-spinner" style={{ width: '16px', height: '16px' }}></div>
-              </div>
-            )}
-            <div
-              className="location-icon"
-              style={{
-                position: 'absolute',
-                right: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                cursor: 'pointer',
-                color: '#6b7280',
-                transition: 'color 0.2s, transform 0.2s',
-                zIndex: 10
-              }}
-              onClick={() => setIsLocationModalOpen(true)}
-              title="Wybierz lokalizację na mapie"
-            >
-              <FaLocationCrosshairs size={20} />
-            </div>
-            {showLocationSuggestions && (
-              <div style={{
-                position: 'absolute',
-                zIndex: 20,
-                width: '100%',
-                backgroundColor: 'white',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                maxHeight: '240px',
-                overflowY: 'auto',
-                marginTop: '4px'
-              }}>
-                {locationSuggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSuggestionSelect(suggestion)}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '12px 16px',
-                      border: 'none',
-                      borderBottom: index < locationSuggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
-                      backgroundColor: 'transparent',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#2d3748'
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    {suggestion.formatted}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {errors.localization && (
-            <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-              {errors.localization}
-            </div>
-          )}
-        </div>
+      <ConsentCheckbox
+        checked={consentAccepted}
+        error={consentError}
+        onChange={(checked) => {
+          setConsentAccepted(checked);
+          if (checked) setConsentError('');
+        }}
+      />
 
-        {/* Pole Bio */}
-        <div className="mb-5">
-          <label className="form-label">
-            Bio
-          </label>
-          <textarea
-            name="bio"
-            value={formData.bio}
-            onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-            placeholder="Opisz siebie w kilku słowach..."
-            rows={3}
-            style={{
-              width: '100%',
-              padding: '16px',
-              border: 'none',
-              borderBottom: '2px solid #e2e8f0',
-              fontSize: '16px',
-              backgroundColor: 'transparent',
-              outline: 'none',
-              transition: 'border-color 0.3s',
-              color: '#2d3748',
-              resize: 'vertical',
-              minHeight: '80px'
-            }}
-            onFocus={(e) => {
-              e.target.style.borderBottomColor = '#fbbf24';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderBottomColor = '#e2e8f0';
-            }}
-          />
-        </div>
+      {submitMessage && (
+        <AuthNotice tone={submitMessage.type === 'success' ? 'success' : 'danger'}>{submitMessage.text}</AuthNotice>
+      )}
 
-        {/* Sekcja zdjęcia profilowego */}
-        <div className="mb-8">
-          <label className="form-label">
-            Zdjęcie profilowe
-          </label>
-          
-          <div 
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            style={{
-              border: `2px dashed ${isDragOver ? '#fbbf24' : '#e2e8f0'}`,
-              borderRadius: '12px',
-              padding: '30px 20px',
-              textAlign: 'center',
-              backgroundColor: isDragOver ? '#fffbeb' : '#f9fafb',
-              transition: 'all 0.3s ease',
-              cursor: 'pointer',
-              position: 'relative'
-            }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <div className="flex flex-col items-center gap-3">
-              <div className="text-sm text-secondary font-bold">
-                {formData.profilePhoto ? 'Zmień zdjęcie' : 'Prześlij zdjęcie'}
-              </div>
-              <div className="text-xs text-secondary">
-                Przeciągnij i upuść plik lub kliknij aby wybrać
-              </div>
-            </div>
+      <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
+        {isSubmitting ? 'Wysyłanie…' : 'Załóż konto'}
+      </Button>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-            />
-          </div>
-          
-          {formData.profilePhoto && (
-            <div className="message-box success mt-3 text-center text-sm">
-              <strong>Wybrano:</strong> {formData.profilePhoto.name}
-            </div>
-          )}
-        </div>
-
-        <ConsentCheckbox
-          checked={consentAccepted}
-          error={consentError}
-          onChange={(checked) => {
-            setConsentAccepted(checked);
-            if (checked) setConsentError('');
-          }}
+      {/* Modal mapy lokalizacji */}
+      {isLocationModalOpen && (
+        <LocationMapModal
+          initialLat={formData.lat}
+          initialLon={formData.lon}
+          onLocationSelect={handleLocationSelect}
+          onClose={() => setIsLocationModalOpen(false)}
         />
-
-        {/* Komunikat o wyniku wysyłania */}
-        {submitMessage && (
-          <div className={`message-box ${submitMessage.type} mb-5 text-center`}>
-            {submitMessage.text}
-          </div>
-        )}
-
-        {/* Przycisk Submit */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className={`btn-primary ${isSubmitting ? 'btn-loading' : ''}`}
-        >
-          {isSubmitting && (
-            <div className="loading-spinner" />
-          )}
-          {isSubmitting ? 'Wysyłanie...' : 'Send request'}
-        </button>
-
-        {/* Modal mapy lokalizacji */}
-        {isLocationModalOpen && (
-          <LocationMapModal
-            initialLat={formData.lat}
-            initialLon={formData.lon}
-            onLocationSelect={handleLocationSelect}
-            onClose={() => setIsLocationModalOpen(false)}
-          />
-        )}
-      </form>
-    </>
+      )}
+    </form>
   );
 }
 
@@ -1374,599 +1042,171 @@ function CompanyRegistrationForm() {
     }
   };
 
-  const getInputStyle = (fieldName: keyof typeof errors) => ({
-    width: '100%',
-    padding: '16px',
-    border: 'none',
-    borderBottom: `2px solid ${errors[fieldName] ? '#ef4444' : '#e2e8f0'}`,
-    fontSize: '16px',
-    backgroundColor: 'transparent',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-    color: '#2d3748'
-  });
-
-  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>, fieldName: keyof typeof errors) => {
-    if (!errors[fieldName]) {
-      e.target.style.borderBottomColor = '#fbbf24';
-    }
-  };
-
   const handleBack = () => {
     setCurrentStep(1);
   };
 
+  const STEPS = ['Dane firmy', 'Osoba kontaktowa'];
+
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      {/* Postęp kroków */}
+      <ol className="mb-2 grid grid-cols-2 gap-2" aria-label="Kroki rejestracji firmy">
+        {STEPS.map((label, index) => {
+          const step = index + 1;
+          const state = step < currentStep ? 'done' : step === currentStep ? 'current' : 'todo';
+          return (
+            <li key={label} aria-current={state === 'current' ? 'step' : undefined}>
+              <div className={cn('h-1 rounded-full', state === 'todo' ? 'bg-line' : 'bg-brand')} />
+              <p className={cn('mt-1.5 text-xs font-medium', state === 'todo' ? 'text-ink-subtle' : 'text-ink')}>
+                Krok {step}<span className="hidden sm:inline"> z {STEPS.length}</span> · {label}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+
       {currentStep === 1 && (
         <>
-          {/* Nazwa firmy */}
-                  <div className="mb-5">
-          <label className="form-label-small">
-            Nazwa firmy
-          </label>
-          <input
-            type="text"
-            name="companyName"
-            value={formData.companyName}
+          <Input label="Nazwa firmy" name="companyName" autoComplete="organization" value={formData.companyName} onChange={handleInputChange} onBlur={handleBlur} error={errors.companyName || undefined} />
+
+          <Textarea
+            label="Informacje o firmie"
+            name="companyDescription"
+            value={formData.companyDescription}
+            onChange={handleTextareaChange}
+            onBlur={handleBlur}
+            rows={3}
+            placeholder="Czym się zajmujecie, co zwykle oferujecie, godziny odbioru…"
+            error={errors.companyDescription || undefined}
+          />
+
+          <LocationField
+            value={formData.localization}
+            error={errors.localization}
+            hint="Wybierz adres z listy podpowiedzi albo na mapie — potrzebujemy współrzędnych."
+            searching={locationSearching}
+            suggestions={locationSuggestions}
+            showSuggestions={showLocationSuggestions}
             onChange={handleInputChange}
             onBlur={handleBlur}
-            className="form-input"
-            style={getInputStyle('companyName')}
-            onFocus={(e) => handleInputFocus(e, 'companyName')}
+            onSelectSuggestion={handleSuggestionSelect}
+            onOpenMap={() => setIsLocationModalOpen(true)}
           />
-          {errors.companyName && (
-            <div className="error-message">
-              {errors.companyName}
+
+          <fieldset>
+            <legend className="mb-1.5 block text-sm font-medium text-ink">Kategoria działalności</legend>
+            <div className="flex flex-wrap gap-2">
+              {categories.map(category => (
+                <Chip
+                  key={category}
+                  selected={formData.category === category}
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, category }));
+                    setTouched(prev => ({ ...prev, category: true }));
+                    setErrors(prev => ({ ...prev, category: validateField('category', category) }));
+                  }}
+                >
+                  {category}
+                </Chip>
+              ))}
             </div>
-          )}
-        </div>
-
-          {/* Informacje o firmie */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Informacje o firmie
-            </label>
-            <textarea
-              name="companyDescription"
-              value={formData.companyDescription}
-              onChange={handleTextareaChange}
-              onBlur={handleBlur}
-              rows={1}
-              style={{
-                ...getInputStyle('companyDescription'),
-                resize: 'none',
-                overflow: 'hidden',
-                minHeight: '50px'
-              }}
-              onFocus={(e) => handleInputFocus(e, 'companyDescription')}
-            />
-            {errors.companyDescription && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.companyDescription}
-              </div>
+            {errors.category && (
+              <p role="alert" className="mt-1 text-xs text-danger">
+                {errors.category}
+              </p>
             )}
-          </div>
+          </fieldset>
 
-          {/* Lokalizacja */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Lokalizacja
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                name="localization"
-                value={formData.localization}
-                onChange={handleInputChange}
-                onBlur={handleBlur}
-                placeholder="Wprowadź lokalizację lub kliknij ikonę GPS"
-                autoComplete="off"
-                className="form-input"
-                style={{
-                  ...getInputStyle('localization'),
-                  paddingRight: '50px' // Dodajemy padding po prawej dla ikony
-                }}
-                onFocus={(e) => handleInputFocus(e, 'localization')}
-              />
-              {locationSearching && (
-                <div style={{
-                  position: 'absolute',
-                  right: '44px',
-                  top: '50%',
-                  transform: 'translateY(-50%)'
-                }}>
-                  <div className="loading-spinner" style={{ width: '16px', height: '16px' }}></div>
-                </div>
-              )}
-              <div
-                className="location-icon"
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  cursor: 'pointer',
-                  color: '#6b7280',
-                  transition: 'color 0.2s, transform 0.2s',
-                  zIndex: 10
-                }}
-                onClick={() => setIsLocationModalOpen(true)}
-                title="Wybierz lokalizację na mapie"
-              >
-                <FaLocationCrosshairs size={20} />
-              </div>
-              {showLocationSuggestions && (
-                <div style={{
-                  position: 'absolute',
-                  zIndex: 20,
-                  width: '100%',
-                  backgroundColor: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                  maxHeight: '240px',
-                  overflowY: 'auto',
-                  marginTop: '4px'
-                }}>
-                  {locationSuggestions.map((suggestion, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSuggestionSelect(suggestion)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '12px 16px',
-                        border: 'none',
-                        borderBottom: index < locationSuggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
-                        backgroundColor: 'transparent',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        color: '#2d3748'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      {suggestion.formatted}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {errors.localization && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.localization}
-              </div>
-            )}
-          </div>
+          <Input
+            label={<>Firmowe tagi <span className="font-normal text-ink-subtle">(opcjonalnie, max 5)</span></>}
+            name="tags"
+            value={formData.tags}
+            onChange={handleInputChange}
+            onBlur={handleBlur}
+            placeholder="np. pieczywo, wypieki, wege"
+            hint="Oddziel przecinkami."
+            error={errors.tags || undefined}
+          />
 
-          {/* Logo firmy */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Logo firmy
-            </label>
+          <PhotoDropzone
+            label="Logo firmy"
+            changeLabel="Zmień logo"
+            file={formData.companyLogo}
+            isDragOver={isDragOver}
+            inputRef={companyLogoInputRef}
+            onFileChange={handleFileChange}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          />
 
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              style={{
-                border: `2px dashed ${isDragOver ? '#fbbf24' : '#e2e8f0'}`,
-                borderRadius: '12px',
-                padding: '30px 20px',
-                textAlign: 'center',
-                backgroundColor: isDragOver ? '#fffbeb' : '#f9fafb',
-                transition: 'all 0.3s ease',
-                cursor: 'pointer',
-                position: 'relative'
-              }}
-              onClick={() => companyLogoInputRef.current?.click()}
-            >
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <div style={{
-                  fontSize: '14px',
-                  color: '#4a5568',
-                  fontWeight: 'bold'
-                }}>
-                  {formData.companyLogo ? 'Zmień logo' : 'Prześlij zdjęcie'}
-                </div>
-                <div style={{
-                  fontSize: '12px',
-                  color: '#4a5568'
-                }}>
-                  Przeciągnij i upuść plik lub kliknij aby wybrać
-                </div>
-              </div>
-
-              <input
-                ref={companyLogoInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            {formData.companyLogo && (
-              <div style={{
-                marginTop: '12px',
-                padding: '12px',
-                backgroundColor: '#f0fff4',
-                border: '1px solid #68d391',
-                borderRadius: '8px',
-                textAlign: 'center',
-                fontSize: '14px',
-                color: '#2d3748'
-              }}>
-                <strong>Wybrano:</strong> {formData.companyLogo.name}
-              </div>
-            )}
-          </div>
-
-          {/* Linki społecznościowe / strona */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              linki społecznościowe / strona
-            </label>
-            {formData.socialLinks.map((link, index) => (
-              <div key={index} style={{ marginBottom: '15px' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '10px', 
-                  marginBottom: '5px' 
-                }}>
-                  <input
-                    type="text"
-                    placeholder="Etykieta, np. Facebook"
+          {/* Linki społecznościowe / strona — kolejny wiersz pojawia się po wypełnieniu ostatniego */}
+          <fieldset>
+            <legend className="mb-1.5 block text-sm font-medium text-ink">
+              Linki społecznościowe / strona <span className="font-normal text-ink-subtle">(opcjonalnie)</span>
+            </legend>
+            <div className="space-y-2">
+              {formData.socialLinks.map((link, index) => (
+                <div key={index} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+                  <Input
+                    aria-label={`Etykieta linku ${index + 1}`}
+                    placeholder="np. Facebook"
                     value={link.label}
                     onChange={(e) => handleSocialLinkChange(index, 'label', e.target.value)}
-                    style={{
-                      flex: '0 0 20%',
-                      padding: '16px',
-                      border: 'none',
-                      borderBottom: `2px solid ${(socialLinksErrors[index]?.label) ? '#ef4444' : '#e2e8f0'}`,
-                      fontSize: '14px',
-                      backgroundColor: 'transparent',
-                      outline: 'none',
-                      transition: 'border-color 0.3s',
-                      color: '#2d3748'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderBottomColor = '#fbbf24';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderBottomColor = (socialLinksErrors[index]?.label) ? '#ef4444' : '#e2e8f0';
-                    }}
+                    error={socialLinksErrors[index]?.label || undefined}
                   />
-                  <input
+                  <Input
+                    aria-label={`Adres linku ${index + 1}`}
                     type="url"
-                    placeholder="Link, np. https://www.facebook.com/"
+                    inputMode="url"
+                    placeholder="https://…"
                     value={link.url}
                     onChange={(e) => handleSocialLinkChange(index, 'url', e.target.value)}
-                    style={{
-                      flex: '1',
-                      padding: '16px',
-                      border: 'none',
-                      borderBottom: `2px solid ${(socialLinksErrors[index]?.url) ? '#ef4444' : '#e2e8f0'}`,
-                      fontSize: '14px',
-                      backgroundColor: 'transparent',
-                      outline: 'none',
-                      transition: 'border-color 0.3s',
-                      color: '#2d3748'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderBottomColor = '#fbbf24';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderBottomColor = (socialLinksErrors[index]?.url) ? '#ef4444' : '#e2e8f0';
-                    }}
+                    error={socialLinksErrors[index]?.url || undefined}
                   />
                 </div>
-                {/* Wyświetlanie błędów dla tego wiersza */}
-                {(socialLinksErrors[index]?.label || socialLinksErrors[index]?.url) && (
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '10px',
-                    fontSize: '12px',
-                    color: '#ef4444',
-                    marginTop: '2px'
-                  }}>
-                    <div style={{ flex: '0 0 20%' }}>
-                      {socialLinksErrors[index]?.label}
-                    </div>
-                    <div style={{ flex: '1' }}>
-                      {socialLinksErrors[index]?.url}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Kategoria działalności */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Kategoria działalności
-            </label>
-            <select
-              name="category"
-              value={formData.category}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={{
-                width: '100%',
-                padding: '16px',
-                border: 'none',
-                borderBottom: `2px solid ${errors.category ? '#ef4444' : '#e2e8f0'}`,
-                fontSize: '16px',
-                backgroundColor: 'transparent',
-                outline: 'none',
-                transition: 'border-color 0.3s',
-                color: '#2d3748',
-                cursor: 'pointer'
-              }}
-              onFocus={(e) => {
-                if (!errors.category) {
-                  e.target.style.borderBottomColor = '#fbbf24';
-                }
-              }}
-            >
-              <option value="" disabled>Wybierz kategorię</option>
-              {categories.map((category, index) => (
-                <option key={index} value={category}>
-                  {category}
-                </option>
               ))}
-            </select>
-            {errors.category && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.category}
-              </div>
-            )}
-          </div>
-
-          {/* Firmowe tagi */}
-          <div style={{ marginBottom: '30px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Firmowe tagi (max 5)
-            </label>
-            <input
-              type="text"
-              name="tags"
-              value={formData.tags}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              placeholder="np. fast food, pizza, dostawa..."
-              style={getInputStyle('tags')}
-              onFocus={(e) => handleInputFocus(e, 'tags')}
-            />
-            {errors.tags && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.tags}
-              </div>
-            )}
-          </div>
+            </div>
+          </fieldset>
         </>
       )}
 
       {currentStep === 2 && (
         <>
-          {/* Imię */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Imię
-            </label>
-            <input
-              type="text"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={getInputStyle('firstName')}
-              onFocus={(e) => handleInputFocus(e, 'firstName')}
-            />
-            {errors.firstName && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.firstName}
-              </div>
-            )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Imię" name="firstName" autoComplete="given-name" value={formData.firstName} onChange={handleInputChange} onBlur={handleBlur} error={errors.firstName || undefined} />
+            <Input label="Nazwisko" name="lastName" autoComplete="family-name" value={formData.lastName} onChange={handleInputChange} onBlur={handleBlur} error={errors.lastName || undefined} />
           </div>
+          <Input label="E-mail" type="email" name="email" autoComplete="email" inputMode="email" value={formData.email} onChange={handleInputChange} onBlur={handleBlur} error={errors.email || undefined} leftIcon={<LuMail size={16} />} placeholder="sklep@przyklad.pl" />
+          <Input label="Numer telefonu" type="tel" name="phoneNumber" autoComplete="tel" value={formData.phoneNumber} onChange={handleInputChange} onBlur={handleBlur} error={errors.phoneNumber || undefined} leftIcon={<LuPhone size={16} />} />
+          <Input label="Hasło" type="password" name="password" autoComplete="new-password" value={formData.password} onChange={handleInputChange} onBlur={handleBlur} error={errors.password || undefined} hint="Co najmniej 6 znaków." leftIcon={<LuLock size={16} />} />
 
-          {/* Nazwisko */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Nazwisko
-            </label>
-            <input
-              type="text"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={getInputStyle('lastName')}
-              onFocus={(e) => handleInputFocus(e, 'lastName')}
-            />
-            {errors.lastName && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.lastName}
-              </div>
-            )}
-          </div>
-
-          {/* Email */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={getInputStyle('email')}
-              onFocus={(e) => handleInputFocus(e, 'email')}
-            />
-            {errors.email && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.email}
-              </div>
-            )}
-          </div>
-
-          {/* Numer telefonu */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Nr telefonu
-            </label>
-            <input
-              type="tel"
-              name="phoneNumber"
-              value={formData.phoneNumber}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={getInputStyle('phoneNumber')}
-              onFocus={(e) => handleInputFocus(e, 'phoneNumber')}
-            />
-            {errors.phoneNumber && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.phoneNumber}
-              </div>
-            )}
-          </div>
-
-          {/* Hasło */}
-          <div style={{ marginBottom: '30px' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#9ca3af',
-              fontSize: '14px'
-            }}>
-              Hasło
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              onBlur={handleBlur}
-              style={getInputStyle('password')}
-              onFocus={(e) => handleInputFocus(e, 'password')}
-            />
-            {errors.password && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-                {errors.password}
-              </div>
-            )}
-          </div>
-
-          {/* Przycisk Wstecz dla kroku 2 */}
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button
-              type="button"
-              onClick={handleBack}
-              className="btn-secondary"
-              style={{ flex: 1 }}
-            >
-              Wstecz
-            </button>
-          </div>
+          <ConsentCheckbox
+            checked={consentAccepted}
+            error={consentError}
+            onChange={(checked) => {
+              setConsentAccepted(checked);
+              if (checked) setConsentError('');
+            }}
+          />
         </>
       )}
 
-      {currentStep === 2 && (
-        <ConsentCheckbox
-          checked={consentAccepted}
-          error={consentError}
-          onChange={(checked) => {
-            setConsentAccepted(checked);
-            if (checked) setConsentError('');
-          }}
-        />
-      )}
-
-      {/* Komunikat o wyniku wysyłania */}
       {submitMessage && (
-        <div style={{
-          padding: '12px',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          backgroundColor: submitMessage.type === 'success' ? '#f0fff4' : '#fef2f2',
-          border: `1px solid ${submitMessage.type === 'success' ? '#68d391' : '#f87171'}`,
-          color: submitMessage.type === 'success' ? '#2d3748' : '#dc2626',
-          textAlign: 'center'
-        }}>
-          {submitMessage.text}
-        </div>
+        <AuthNotice tone={submitMessage.type === 'success' ? 'success' : 'danger'}>{submitMessage.text}</AuthNotice>
       )}
 
-      {/* Przycisk Następne/Submit */}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className={`btn-primary ${isSubmitting ? 'btn-loading' : ''}`}
-      >
-        {isSubmitting && (
-          <div className="loading-spinner" />
+      <div className="flex gap-3">
+        {currentStep === 2 && (
+          <Button type="button" variant="secondary" size="lg" onClick={handleBack} className="flex-1">
+            Wstecz
+          </Button>
         )}
-        {isSubmitting ? 'Wysyłanie...' : (currentStep === 1 ? 'Następne' : 'Send request')}
-      </button>
+        <Button type="submit" size="lg" loading={isSubmitting} className="flex-[2]">
+          {isSubmitting ? 'Wysyłanie…' : currentStep === 1 ? 'Dalej' : 'Załóż konto firmy'}
+        </Button>
+      </div>
 
       {/* Modal mapy lokalizacji */}
       {isLocationModalOpen && (

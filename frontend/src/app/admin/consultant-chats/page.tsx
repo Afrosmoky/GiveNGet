@@ -1,10 +1,14 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { Fragment, useState, useEffect, useRef, useCallback } from 'react';
 import { environment } from '../../../config';
 import { authorizedFetch, getUserData } from '../../../utils/auth';
 import { AuthGuard } from '../../../components/AuthGuard';
 import { useWebSocketContext } from '../../../context/WebSocketContext';
 import { isMobile } from '../../../config/breakpoints';
+import { LuHeadphones, LuRefreshCw } from 'react-icons/lu';
+import { Avatar, Badge, Button, Card, Chip, PageHeader, cn, consolePage } from '../../../components/ui';
+import { formatShortDateTime } from '../../../utils/dateFormat';
+import { ChatHeader, ChatPane, ChatPlaceholder, Composer, DaySeparator, MessageBubble, MessageScroller, dayLabel, startsNewDay, timeLabel } from '../../../components/chat/ChatUI';
 
 interface ConsultantChat {
   id: number;
@@ -53,6 +57,7 @@ function ConsultantChatsPageContent() {
   const fetchingChatsRef = useRef(false);
   const [assigningChat, setAssigningChat] = useState<number | null>(null);
   const [unassigningChat, setUnassigningChat] = useState<number | null>(null);
+  const [listFilter, setListFilter] = useState<'all' | 'waiting' | 'mine'>('all');
   const selectedChatIdRef = useRef<number | null>(selectedChatId);
   const chatsRef = useRef<ConsultantChat[]>([]);
   const wsCtx = useWebSocketContext();
@@ -463,274 +468,177 @@ function ConsultantChatsPageContent() {
     }
   };
 
-  // Formatuj datę
-  const formatDateTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('pl-PL', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
   const isAssignedToMe = selectedChat?.moderatorId === currentModeratorId;
 
-  return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', background: '#f7fafc' }}>
-      {/* Lewy panel: lista czatów */}
-      <div style={{ 
-        width: isMobileView ? '100%' : '100%', 
-        maxWidth: isMobileView ? '100%' : 320, 
-        minWidth: isMobileView ? '100%' : 120, 
-        background: '#23272f', 
-        color: 'white', 
-        padding: 8, 
-        overflowY: 'auto',
-        display: isMobileView && !showChatList ? 'none' : 'block'
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 16, paddingLeft: 8 }}>Czaty z konsultantem</div>
+  const waitingCount = chats.filter(c => c.status === 'OPENED').length;
+  const mineCount = chats.filter(c => c.status === 'ASSIGNED' && c.moderatorId === currentModeratorId).length;
+  const visibleChats = chats.filter(chat =>
+    listFilter === 'all' ? true : listFilter === 'waiting' ? chat.status === 'OPENED' : chat.status === 'ASSIGNED' && chat.moderatorId === currentModeratorId
+  );
 
-        {loading ? (
-          <div style={{ color: 'white', textAlign: 'center', marginTop: 32 }}>Ładowanie...</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {chats.length === 0 ? (
-              <div style={{ color: '#9ca3af', textAlign: 'center', marginTop: 32, padding: 16 }}>
-                Brak dostępnych czatów
-              </div>
-            ) : (
-              chats.map(chat => (
-                <div
-                  key={chat.id}
-                  style={{
-                    padding: 12,
-                    borderRadius: 8,
-                    background: selectedChatId === chat.id ? '#374151' : '#23272f',
-                    cursor: 'pointer',
-                    marginBottom: 2,
-                    transition: 'background 0.2s',
-                    border: selectedChatId === chat.id ? '1px solid #4f46e5' : '1px solid transparent'
-                  }}
-                  onClick={() => {
-                    setSelectedChatId(chat.id);
-                    if (isMobileView) {
-                      setShowChatList(false);
-                    }
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ 
-                        width: 32, 
-                        height: 32, 
-                        borderRadius: '50%', 
-                        background: chat.status === 'ASSIGNED' ? '#10b981' : '#fbbf24',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: 16
-                      }}>
-                        {chat.userName.split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                          {chat.userName}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                          {chat.status === 'ASSIGNED' 
-                            ? chat.moderatorId === currentModeratorId 
-                              ? 'Przypisany do mnie' 
-                              : `Przypisany do ${chat.moderatorName}`
-                            : 'Oczekuje na przypisanie'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13, color: '#d1d5db', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                      {chat.lastMessagePreview || 'Brak wiadomości'}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+  return (
+    <div className={cn(consolePage, 'flex flex-col')}>
+      <PageHeader
+        title="Czaty z konsultantem"
+        description="Pytania użytkowników do zespołu. Przypisz rozmowę do siebie, żeby odpowiadać."
+        actions={
+          <Button variant="secondary" leftIcon={<LuRefreshCw size={16} />} onClick={() => void fetchChats()} disabled={loading}>
+            Odśwież
+          </Button>
+        }
+      />
+
+    <Card padding="none" className="flex h-[calc(100dvh-14rem)] min-h-[28rem] overflow-hidden">
+      {/* Lewy panel: lista czatów */}
+      <div
+        className={cn(
+          'flex w-full shrink-0 flex-col border-line md:w-96 md:border-r',
+          isMobileView && !showChatList && 'hidden'
         )}
+      >
+        <div className="flex flex-wrap gap-2 border-b border-line p-3" role="group" aria-label="Filtr czatów">
+          <Chip selected={listFilter === 'all'} count={chats.length} onClick={() => setListFilter('all')}>Wszystkie</Chip>
+          <Chip selected={listFilter === 'waiting'} count={waitingCount} onClick={() => setListFilter('waiting')}>Czekające</Chip>
+          <Chip selected={listFilter === 'mine'} count={mineCount} onClick={() => setListFilter('mine')}>Moje</Chip>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {loading && chats.length === 0 ? (
+            <div className="space-y-2 p-1">
+              {[0, 1, 2].map(i => <div key={i} className="h-16 animate-pulse rounded-ui-md bg-surface-sunken" />)}
+            </div>
+          ) : visibleChats.length === 0 ? (
+            <div className="flex flex-col items-center px-4 py-12 text-center">
+              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-surface-sunken text-ink-subtle">
+                <LuHeadphones size={20} aria-hidden />
+              </span>
+              <p className="text-sm font-medium text-ink">{chats.length === 0 ? 'Brak rozmów' : 'Nic w tym filtrze'}</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {chats.length === 0 ? 'Nowe pytania użytkowników pojawią się tu same.' : 'Zmień filtr, żeby zobaczyć pozostałe rozmowy.'}
+              </p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {visibleChats.map(chat => {
+                const selected = selectedChatId === chat.id;
+                const mine = chat.moderatorId === currentModeratorId;
+                return (
+                  <li key={chat.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedChatId(chat.id);
+                        if (isMobileView) {
+                          setShowChatList(false);
+                        }
+                      }}
+                      aria-current={selected || undefined}
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-ui-md border p-3 text-left transition-colors',
+                        selected ? 'border-brand/40 bg-brand-soft' : 'border-transparent hover:bg-surface-muted'
+                      )}
+                    >
+                      <Avatar name={chat.userName} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-ink">{chat.userName}</span>
+                          {chat.lastMessageAt && (
+                            <span className="shrink-0 text-[11px] text-ink-subtle">{formatShortDateTime(chat.lastMessageAt)}</span>
+                          )}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-ink-muted">{chat.lastMessagePreview || 'Brak wiadomości'}</span>
+                        <span className="mt-1.5 block">
+                          {chat.status === 'OPENED' ? (
+                            <Badge tone="warning" dot>Czeka na konsultanta</Badge>
+                          ) : chat.status === 'ASSIGNED' ? (
+                            <Badge tone={mine ? 'success' : 'neutral'} dot>{mine ? 'Przypisany do mnie' : `Prowadzi: ${chat.moderatorName ?? '—'}`}</Badge>
+                          ) : (
+                            <Badge dot>Zamknięty</Badge>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
 
       {/* Prawy panel: okno rozmowy */}
-      <div style={{ 
-        flex: 1, 
-        background: 'white', 
-        flexDirection: 'column', 
-        height: '100%',
-        display: isMobileView && showChatList ? 'none' : 'flex'
-      }}>
+      <ChatPane hidden={isMobileView && showChatList}>
         {selectedChatId && selectedChat ? (
           <>
-            {/* Pasek górny */}
-            <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#f7fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {isMobileView && (
-                  <button
-                    onClick={() => {
+            <ChatHeader
+              title={selectedChat.userName}
+              subtitle={
+                selectedChat.status === 'ASSIGNED'
+                  ? isAssignedToMe ? 'Przypisany do mnie' : `Prowadzi: ${selectedChat.moderatorName ?? '—'}`
+                  : selectedChat.status === 'OPENED' ? 'Czeka na konsultanta' : 'Zamknięty'
+              }
+              onBack={
+                isMobileView
+                  ? () => {
                       setShowChatList(true);
                       setSelectedChatId(null);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#4f46e5',
-                      fontSize: 18,
-                      cursor: 'pointer',
-                      padding: 4,
-                      borderRadius: 4
-                    }}
-                  >
-                    ←
-                  </button>
-                )}
-                <div style={{ fontWeight: 600, fontSize: 18, color: '#23272f' }}>
-                  {selectedChat.userName}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {selectedChat.status === 'OPENED' && (
-                  <button
-                    onClick={() => assignChat(selectedChat.id)}
-                    disabled={assigningChat === selectedChat.id}
-                    style={{
-                      background: assigningChat === selectedChat.id ? '#6b7280' : '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '8px 16px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: assigningChat === selectedChat.id ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {assigningChat === selectedChat.id ? 'Przypisywanie...' : 'Przypisz do mnie'}
-                  </button>
-                )}
-                {isAssignedToMe && (
-                  <button
-                    onClick={() => unassignChat(selectedChat.id)}
-                    disabled={unassigningChat === selectedChat.id}
-                    style={{
-                      background: unassigningChat === selectedChat.id ? '#6b7280' : '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '8px 16px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: unassigningChat === selectedChat.id ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {unassigningChat === selectedChat.id ? 'Odpinanie...' : 'Odepnij'}
-                  </button>
-                )}
-              </div>
-            </div>
+                    }
+                  : undefined
+              }
+              actions={
+                <>
+                  {selectedChat.status === 'OPENED' && (
+                    <Button size="sm" loading={assigningChat === selectedChat.id} onClick={() => assignChat(selectedChat.id)}>
+                      {assigningChat === selectedChat.id ? 'Przypisywanie…' : 'Przypisz do mnie'}
+                    </Button>
+                  )}
+                  {isAssignedToMe && (
+                    <Button variant="secondary" size="sm" loading={unassigningChat === selectedChat.id} onClick={() => unassignChat(selectedChat.id)}>
+                      {unassigningChat === selectedChat.id ? 'Odpinanie…' : 'Odepnij'}
+                    </Button>
+                  )}
+                </>
+              }
+            />
 
-            {/* Wiadomości */}
-            <div 
-              ref={messagesContainerRef}
-              style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#f9fafb', display: 'flex', flexDirection: 'column' }}
-            >
+            <MessageScroller ref={messagesContainerRef}>
               {messages.length > 0 ? (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    style={{
-                      alignSelf: msg.senderId === currentModeratorId ? 'flex-end' : 'flex-start',
-                      display: 'flex',
-                      flexDirection: msg.senderId === currentModeratorId ? 'row-reverse' : 'row',
-                      alignItems: 'flex-end',
-                      gap: 8,
-                      marginBottom: 8,
-                      maxWidth: '70%'
-                    }}
-                  >
-                    <div
-                      style={{
-                        background: msg.senderId === currentModeratorId ? '#fbbf24' : '#e5e7eb',
-                        color: '#23272f',
-                        borderRadius: 16,
-                        padding: '8px 16px',
-                        wordBreak: 'break-word',
-                        fontSize: 15,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                      }}
-                    >
-                      <div style={{ fontWeight: 500 }}>{msg.content}</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-                        {formatDateTime(msg.timestamp)}
-                      </div>
-                    </div>
-                  </div>
-                ))
+                messages.map((msg, idx) => {
+                  const mine = msg.senderId === currentModeratorId;
+                  const previous = messages[idx - 1];
+                  const newDay = startsNewDay(msg.timestamp, previous?.timestamp);
+                  const firstInSeries = newDay || previous?.senderId !== msg.senderId;
+                  return (
+                    <Fragment key={msg.id}>
+                      {newDay && <DaySeparator label={dayLabel(msg.timestamp)} />}
+                      <MessageBubble
+                        mine={mine}
+                        content={msg.content}
+                        time={timeLabel(msg.timestamp)}
+                        avatar={!mine && firstInSeries ? <Avatar name={msg.senderName} size="sm" /> : undefined}
+                      />
+                    </Fragment>
+                  );
+                })
               ) : (
-                <div style={{ color: '#6b7280', textAlign: 'center', marginTop: 32 }}>
-                  Brak wiadomości
-                </div>
+                <ChatPlaceholder title="Brak wiadomości" />
               )}
-            </div>
+            </MessageScroller>
 
-            {/* Pole do wpisywania wiadomości */}
-            {isAssignedToMe && (
-              <form
-                onSubmit={e => { e.preventDefault(); sendMessage(); }}
-                style={{ display: 'flex', padding: 16, borderTop: '1px solid #e5e7eb', background: '#f7fafc' }}
-              >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  placeholder="Napisz wiadomość..."
-                  style={{ 
-                    flex: 1, 
-                    padding: 12, 
-                    borderRadius: 8, 
-                    border: '1px solid #d1d5db', 
-                    fontSize: 15, 
-                    outline: 'none', 
-                    marginRight: 8
-                  }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim()}
-                  style={{ 
-                    background: input.trim() ? '#fbbf24' : '#d1d5db', 
-                    color: '#23272f', 
-                    border: 'none', 
-                    borderRadius: 8, 
-                    padding: '0 20px', 
-                    fontWeight: 600, 
-                    fontSize: 15, 
-                    cursor: input.trim() ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Wyślij
-                </button>
-              </form>
-            )}
+            {isAssignedToMe && <Composer value={input} onChange={setInput} onSend={sendMessage} />}
             {!isAssignedToMe && selectedChat.status === 'OPENED' && (
-              <div style={{ padding: 16, textAlign: 'center', color: '#6b7280', background: '#f7fafc', borderTop: '1px solid #e5e7eb' }}>
-                Przypisz czat do siebie, aby móc wysyłać wiadomości
-              </div>
+              <p className="border-t border-line bg-surface-muted px-4 py-3 text-center text-xs text-ink-muted">
+                Przypisz czat do siebie, aby móc wysyłać wiadomości.
+              </p>
             )}
           </>
         ) : (
-          <div style={{ color: '#6b7280', fontSize: 18, margin: 'auto', textAlign: 'center' }}>
-            Wybierz czat z lewej strony
-          </div>
+          <ChatPlaceholder icon={<LuHeadphones size={22} aria-hidden />} title="Wybierz rozmowę" description="Kliknij rozmowę na liście po lewej." />
         )}
-      </div>
+      </ChatPane>
+    </Card>
     </div>
   );
 }

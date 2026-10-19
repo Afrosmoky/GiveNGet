@@ -2,25 +2,42 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { LuClock, LuHeart, LuMapPin } from 'react-icons/lu';
 import { getImageUrl } from '../utils/imageUtils';
 import { useFavorites } from '../hooks/useFavorites';
 import { useErrorContext } from '../context/ErrorContext';
-import FavoriteHeart from './FavoriteHeart';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 import { trackOfferClick } from '../utils/auth';
-
-import { OfferTileProps, TransactionType, OfferStatus, STATUS_LABELS } from '../types/offer';
+import { canReserveOffer } from '../types/reservation';
+import { OfferTileProps, OfferStatus, STATUS_LABELS } from '../types/offer';
 import UserRankBadge from './UserRankBadge';
+import { Badge, IconButton, Price, StatusPill, buttonClasses, cn, type BadgeTone } from './ui';
+import { categoryIcon } from './offer/categoryIcons';
 
 interface ExtendedOfferTileProps extends OfferTileProps {
   isEditing?: boolean;
   showStatus?: boolean;
   onFavoriteToggle?: (offerId: string, currentIsFavorite: boolean) => Promise<void>;
-  /** Ukrywa link „Sklep: …" — np. na stronie samego sklepu, gdzie byłby pętlą. */
+  /** Ukrywa badge sprzedawcy — np. na stronie samego sklepu, gdzie byłby pętlą. */
   hideStoreLink?: boolean;
+  className?: string;
 }
 
+const OFFER_STATUS_TONE: Record<OfferStatus, BadgeTone> = {
+  ACTIVE: 'success',
+  INACTIVE: 'neutral',
+  PENDING_VERIFICATION: 'warning',
+};
+
+/**
+ * Kafelek oferty. Cały kafelek prowadzi do oferty przez „rozciągnięty” link w tytule
+ * (pseudo-element na całą kartę) — badge sprzedawcy, serduszko i „Rezerwuj” leżą nad nim
+ * jako rodzeństwo, więc nie ma zagnieżdżonych <a>/<button> w <a>.
+ *
+ * Szerokość kafelka wyznacza kontener (siatka / rząd). Propsy width/height/imageWidth/imageHeight
+ * zostały w typie dla zgodności, ale nie są już używane.
+ */
 export default function OfferTile({
   id,
   name,
@@ -29,10 +46,6 @@ export default function OfferTile({
   transactionType,
   status,
   isFavorite = false,
-  width = 200,
-  height = 220,
-  imageWidth = 150,
-  imageHeight = 90,
   isEditing = false,
   showStatus = false,
   sellerRank,
@@ -40,12 +53,21 @@ export default function OfferTile({
   sellerId,
   sellerType,
   storeName,
+  distance,
+  categoryId,
+  price,
+  currency,
+  originalPrice,
+  discountPercent,
+  availableQuantity,
+  pickupDateTo,
   hideStoreLink = false,
-  onFavoriteToggle
+  onFavoriteToggle,
+  className,
 }: ExtendedOfferTileProps) {
-  const router = useRouter();
   const { toggleFavorite, loading } = useFavorites();
   const { addError } = useErrorContext();
+  const { user } = useCurrentUser();
   const [localIsFavorite, setLocalIsFavorite] = useState(isFavorite);
 
   // Synchronizuj lokalny stan z propem gdy się zmieni
@@ -53,36 +75,10 @@ export default function OfferTile({
     setLocalIsFavorite(isFavorite);
   }, [isFavorite]);
 
-  const getTransactionTypeText = (type: TransactionType) => {
-    switch (type) {
-      case 'free':
-        return 'Za darmo';
-      case 'sale':
-        return 'Na sprzedaż';
-      case 'exchange':
-        return 'Wymiana';
-      default:
-        return '';
-    }
-  };
-
-  const getStatusColors = (status?: OfferStatus) => {
-    switch (status) {
-      case 'ACTIVE':
-        return { bg: '#dcfce7', text: '#166534' }; // green-100, green-800
-      case 'INACTIVE':
-        return { bg: '#f3f4f6', text: '#374151' }; // gray-100, gray-800
-      case 'PENDING_VERIFICATION':
-        return { bg: '#fef3c7', text: '#92400e' }; // yellow-100, yellow-800
-      default:
-        return { bg: '#f3f4f6', text: '#374151' };
-    }
-  };
-
   const handleFavoriteClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (onFavoriteToggle) {
       // Użyj zewnętrznej funkcji do synchronizacji między sekcjami
       await onFavoriteToggle(id, localIsFavorite);
@@ -101,174 +97,137 @@ export default function OfferTile({
     if (!isEditing) {
       trackOfferClick(id);
     }
-    // Nie blokujemy propagacji - pozwalamy na normalne działanie Link
   };
 
   const href = isEditing ? `/offers/edit/${id}` : `/offers/${id}/${name}`;
-  const showStoreLink = !hideStoreLink && !isEditing && sellerType === 'COMPANY' && !!sellerId && !!storeName;
 
-  // Kafelek jest jednym <Link> do oferty, więc link do sklepu nie może być zagnieżdżonym <a> —
-  // przycisk przechwytuje kliknięcie tak samo jak serduszko ulubionych
-  const handleStoreClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    router.push(`/stores/${sellerId}`);
-  };
-  
+  // Badge sprzedawcy: sklep → profil sklepu, osoba prywatna → jej profil
+  const isCompany = sellerType === 'COMPANY';
+  const showSeller = !hideStoreLink && !isEditing && !!sellerId;
+  const sellerHref = isCompany ? `/stores/${sellerId}` : `/profile/${sellerId}`;
+  const sellerLabel = [isCompany ? storeName || 'Sklep' : 'Osoba prywatna', distance].filter(Boolean).join(' · ');
+
+  // Prawy górny róg: darmowa oferta albo stan sztuk (wyliczony w backendzie)
+  const pill =
+    transactionType === 'free' ? (
+      <StatusPill status="free" />
+    ) : typeof availableQuantity === 'number' ? (
+      availableQuantity > 0 ? <StatusPill status="remaining" count={availableQuantity} /> : <StatusPill status="soldout" />
+    ) : null;
+
+  const showReserve =
+    !isEditing && canReserveOffer(user, { sellerId, availableQuantity }) && (availableQuantity ?? 0) > 0;
+
+  const CategoryIcon = categoryIcon(categoryId);
+
   return (
-    <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }} onClick={handleOfferClick}>
-      <div style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        background: '#f7fafc',
-        borderRadius: '12px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-        padding: '10px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        position: 'relative',
-        transition: 'box-shadow 0.2s',
-        cursor: 'pointer',
-        minWidth: '0',
-        flexShrink: 0
-      }}>
-        {/* Ikona ulubionych */}
-        <div style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          zIndex: 10
-        }}>
-          <FavoriteHeart
-            isFavorite={localIsFavorite}
+    <article
+      className={cn(
+        'group relative flex min-w-0 flex-col overflow-hidden rounded-ui-xl border border-line bg-surface shadow-card transition-shadow',
+        'hover:border-line-strong hover:shadow-pop focus-within:ring-2 focus-within:ring-brand/40',
+        className
+      )}
+    >
+      {/* Obraz */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-brand-soft">
+        {imageUrl ? (
+          <Image
+            src={getImageUrl(imageUrl)}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 50vw, 260px"
+            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-brand/60">
+            <CategoryIcon size={44} strokeWidth={1.5} aria-hidden />
+          </div>
+        )}
+
+        {/* Jeden rząd: badge sprzedawcy się skraca, pigułka statusu nie — na wąskiej karcie nie nachodzą na siebie */}
+        {(showSeller || pill) && (
+          <div className="pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-1.5">
+            {showSeller ? (
+              <Link
+                href={sellerHref}
+                onClick={e => e.stopPropagation()}
+                title={isCompany ? `Zobacz sklep: ${storeName || ''}` : 'Zobacz profil sprzedającego'}
+                className="pointer-events-auto min-w-0 truncate rounded-full bg-surface/90 px-2.5 py-1 text-xs font-medium text-ink shadow-card backdrop-blur transition-colors hover:bg-surface"
+              >
+                {sellerLabel}
+              </Link>
+            ) : (
+              <span />
+            )}
+            {pill && <div className="shrink-0">{pill}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* Treść */}
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-5 text-ink" title={name}>
+          <Link
+            href={href}
+            onClick={handleOfferClick}
+            className="after:absolute after:inset-0 after:content-[''] focus:outline-none"
+          >
+            {name}
+          </Link>
+        </h3>
+
+        {(pickupDateTo || location) && (
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
+            {pickupDateTo && (
+              <span className="inline-flex items-center gap-1">
+                <LuClock size={13} aria-hidden />
+                do {pickupDateTo}
+              </span>
+            )}
+            {location && (
+              <span className="inline-flex min-w-0 items-center gap-1" title={location}>
+                <LuMapPin size={13} aria-hidden className="shrink-0" />
+                <span className="truncate">{location}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {(sellerRank || (status && (isEditing || showStatus))) && (
+          <div className="relative z-10 flex flex-wrap items-center gap-1.5">
+            {sellerRank && (
+              <UserRankBadge rank={sellerRank} trustPoints={sellerTrustPoints} showPoints={false} size="small" clickable={true} />
+            )}
+            {status && (isEditing || showStatus) && <Badge tone={OFFER_STATUS_TONE[status]}>{STATUS_LABELS[status]}</Badge>}
+          </div>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+          <Price
+            transactionType={transactionType}
+            price={price}
+            currency={currency}
+            originalPrice={originalPrice}
+            discountPercent={discountPercent}
+          />
+
+          <IconButton
+            label={localIsFavorite ? 'Usuń z ulubionych' : 'Dodaj do ulubionych'}
+            icon={<LuHeart size={18} fill={localIsFavorite ? 'currentColor' : 'none'} />}
             onClick={handleFavoriteClick}
-            loading={loading(id)}
-            size={18}
+            disabled={loading(id)}
+            aria-pressed={localIsFavorite}
+            className={cn('relative z-10 -mr-1.5 h-8 w-8 shrink-0', localIsFavorite && '!text-danger')}
           />
         </div>
 
-        <div style={{
-          width: `${imageWidth}px`,
-          height: `${imageHeight}px`,
-          borderRadius: '8px',
-          overflow: 'hidden',
-          background: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <Image 
-            src={getImageUrl(imageUrl)} 
-            alt={name} 
-            width={imageWidth} 
-            height={imageHeight} 
-            style={{ objectFit: 'cover' }} 
-          />
-        </div>
-        <div 
-          style={{
-            width: '100%',
-            marginTop: '12px',
-            textAlign: 'center',
-            fontWeight: 'bold',
-            fontSize: '16px',
-            height: '22px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            lineHeight: '1.2'
-          }}
-          title={name}
-        >
-          {name}
-        </div>
-        <div 
-          style={{
-            width: '100%',
-            textAlign: 'center',
-            color: '#666',
-            fontSize: '13px',
-            height: '18px',
-            marginTop: '4px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            lineHeight: '1.2'
-          }}
-          title={location}
-        >
-          {location}
-        </div>
-        {showStoreLink && (
-          <button
-            type="button"
-            onClick={handleStoreClick}
-            title={`Zobacz sklep: ${storeName}`}
-            style={{
-              maxWidth: '100%',
-              marginTop: '2px',
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: '#b7791f',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              textDecoration: 'underline'
-            }}
-          >
-            Sklep: {storeName}
-          </button>
+        {showReserve && (
+          // Rezerwacja (wybór liczby sztuk) jest w szczegółach oferty — kafelek tylko tam prowadzi
+          <Link href={href} onClick={handleOfferClick} className={cn(buttonClasses('primary', 'sm', true), 'relative z-10')}>
+            Rezerwuj
+          </Link>
         )}
-        <div style={{
-          width: '100%',
-          textAlign: 'center',
-          position: 'absolute',
-          bottom: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          alignItems: 'center'
-        }}>
-          <div style={{
-            color: '#888',
-            fontSize: '12px'
-          }}>
-            {getTransactionTypeText(transactionType)}
-          </div>
-          
-          {/* Ranga sprzedawcy */}
-          {sellerRank && (
-            <div style={{ marginTop: '2px' }}>
-              <UserRankBadge 
-                rank={sellerRank} 
-                trustPoints={sellerTrustPoints}
-                showPoints={false}
-                size="small"
-                clickable={true}
-              />
-            </div>
-          )}
-          
-          {status && (isEditing || showStatus) && (
-            <div style={{
-              backgroundColor: getStatusColors(status).bg,
-              color: getStatusColors(status).text,
-              padding: '2px 6px',
-              borderRadius: '12px',
-              fontSize: '10px',
-              fontWeight: '500'
-            }}>
-              {STATUS_LABELS[status]}
-            </div>
-          )}
-        </div>
       </div>
-    </Link>
+    </article>
   );
-} 
+}

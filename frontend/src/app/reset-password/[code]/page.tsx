@@ -4,7 +4,10 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { environment } from '../../../config';
-import Image from 'next/image';
+import { LuLock } from 'react-icons/lu';
+import { AuthCard, AuthNotice, authLinkClass } from '../../../components/auth/AuthCard';
+import { Button, Input } from '../../../components/ui';
+import { describeErrorCode, parseApiError } from '../../../utils/apiErrors';
 
 export default function ResetPasswordWithCodePage() {
   const params = useParams();
@@ -17,6 +20,7 @@ export default function ResetPasswordWithCodePage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [invalidLink, setInvalidLink] = useState(false);
   const [errors, setErrors] = useState({
     password: '',
     confirmPassword: ''
@@ -116,7 +120,7 @@ export default function ResetPasswordWithCodePage() {
       setIsSubmitting(true);
       
       try {
-        const response = await fetch(`${environment.apiUrl}/api/reset-password/ ${code}`, {
+        const response = await fetch(`${environment.apiUrl}/api/reset-password/${encodeURIComponent(code)}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -137,10 +141,15 @@ export default function ResetPasswordWithCodePage() {
           }, 3000);
           
         } else {
-          const errorData = await response.json().catch(() => ({}));
+          // Rozgałęzienie po code (6.3): nieważny link → komunikat + link do nowego resetu
+          const body = await response.text().catch(() => '');
+          const apiError = parseApiError(body);
+          setInvalidLink(apiError?.code === 'INVALID_RESET_CODE');
           setSubmitMessage({
             type: 'error',
-            text: errorData.message || `Błąd serwera: ${response.status}. Link może być nieprawidłowy lub wygasły.`
+            text: apiError
+              ? describeErrorCode(apiError.code, apiError.message)
+              : `Błąd serwera: ${response.status}. Spróbuj ponownie za chwilę.`
           });
         }
         
@@ -156,229 +165,62 @@ export default function ResetPasswordWithCodePage() {
     }
   };
 
-  const getInputStyle = (fieldName: keyof typeof errors) => ({
-    width: '100%',
-    padding: '16px',
-    border: 'none',
-    borderBottom: `2px solid ${errors[fieldName] ? '#ef4444' : '#e2e8f0'}`,
-    fontSize: '16px',
-    backgroundColor: 'transparent',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-    color: '#2d3748'
-  });
-
-  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>, fieldName: keyof typeof errors) => {
-    if (!errors[fieldName]) {
-      e.target.style.borderBottomColor = '#fbbf24';
-    }
-  };
-
-  const handleInputBlurStyle = (e: React.FocusEvent<HTMLInputElement>, fieldName: keyof typeof errors) => {
-    if (!errors[fieldName]) {
-      e.target.style.borderBottomColor = '#e2e8f0';
-    }
-  };
-
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 160px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#f7fafc',
-      padding: '20px'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '16px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        width: '100%',
-        maxWidth: '400px',
-        padding: '40px',
-        textAlign: 'center'
-      }}>
-        {/* Logo */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          marginBottom: '20px'
-        }}>
-          <Image
-            src="/images/logo.png"
-            alt="GnG Logo"
-            width={150}
-            height={75}
-            style={{ objectFit: 'contain' }}
-          />
-        </div>
+    <AuthCard
+      title="Nowe hasło"
+      description="Wprowadź nowe hasło do swojego konta."
+      footer={
+        <Link href="/login" className={authLinkClass}>
+          Wróć do logowania
+        </Link>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <Input
+          label="Nowe hasło"
+          type="password"
+          name="password"
+          autoComplete="new-password"
+          size="lg"
+          value={formData.password}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          placeholder="Co najmniej 6 znaków"
+          error={errors.password || undefined}
+          leftIcon={<LuLock size={16} />}
+        />
+        <Input
+          label="Potwierdź hasło"
+          type="password"
+          name="confirmPassword"
+          autoComplete="new-password"
+          size="lg"
+          value={formData.confirmPassword}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          placeholder="Powtórz nowe hasło"
+          error={errors.confirmPassword || undefined}
+          leftIcon={<LuLock size={16} />}
+        />
 
-        {/* Tytuł */}
-        <h1 style={{
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#2d3748',
-          marginBottom: '10px'
-        }}>
-          Nowe hasło
-        </h1>
-
-        <p style={{
-          color: '#4a5568',
-          fontSize: '14px',
-          marginBottom: '30px',
-          lineHeight: '1.4'
-        }}>
-          Wprowadź nowe hasło dla swojego konta.
-        </p>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#4a5568',
-              fontSize: '16px'
-            }}>
-              Nowe hasło
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              onBlur={(e) => {
-                handleBlur(e);
-                handleInputBlurStyle(e, 'password');
-              }}
-              onFocus={(e) => handleInputFocus(e, 'password')}
-              style={getInputStyle('password')}
-              placeholder="Wprowadź nowe hasło"
-            />
-            {errors.password && (
-              <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
-                {errors.password}
-              </div>
+        {submitMessage && (
+          <AuthNotice tone={submitMessage.type === 'success' ? 'success' : 'danger'}>
+            {submitMessage.text}
+            {invalidLink && (
+              <>
+                {' '}
+                <Link href="/reset-password" className="font-semibold underline underline-offset-2">
+                  Poproś o nowy link
+                </Link>
+              </>
             )}
-          </div>
+          </AuthNotice>
+        )}
 
-          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#4a5568',
-              fontSize: '16px'
-            }}>
-              Potwierdź hasło
-            </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              onBlur={(e) => {
-                handleBlur(e);
-                handleInputBlurStyle(e, 'confirmPassword');
-              }}
-              onFocus={(e) => handleInputFocus(e, 'confirmPassword')}
-              style={getInputStyle('confirmPassword')}
-              placeholder="Potwierdź nowe hasło"
-            />
-            {errors.confirmPassword && (
-              <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
-                {errors.confirmPassword}
-              </div>
-            )}
-          </div>
-
-          {/* Komunikat o wyniku wysyłania */}
-          {submitMessage && (
-            <div style={{
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              backgroundColor: submitMessage.type === 'success' ? '#f0fff4' : '#fef2f2',
-              border: `1px solid ${submitMessage.type === 'success' ? '#68d391' : '#f87171'}`,
-              color: submitMessage.type === 'success' ? '#2d3748' : '#dc2626',
-              textAlign: 'center',
-              fontSize: '14px'
-            }}>
-              {submitMessage.text}
-            </div>
-          )}
-
-          {/* Przycisk Submit */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            style={{
-              width: '100%',
-              padding: '16px',
-              backgroundColor: isSubmitting ? '#a0aec0' : '#fbbf24',
-              color: isSubmitting ? '#4a5568' : '#1a202c',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              transition: 'background-color 0.3s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              marginBottom: '20px'
-            }}
-            onMouseOver={(e) => {
-              if (!isSubmitting) {
-                e.currentTarget.style.backgroundColor = '#f59e0b';
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!isSubmitting) {
-                e.currentTarget.style.backgroundColor = '#fbbf24';
-              }
-            }}
-          >
-            {isSubmitting && (
-              <div style={{
-                width: '16px',
-                height: '16px',
-                border: '2px solid #1a202c',
-                borderTop: '2px solid transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
-            )}
-            {isSubmitting ? 'Zmieniam hasło...' : 'Zmień hasło'}
-          </button>
-        </form>
-
-        {/* Linki nawigacyjne */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          alignItems: 'center'
-        }}>
-          <Link 
-            href="/login"
-            style={{
-              color: '#4a5568',
-              textDecoration: 'none',
-              fontSize: '14px'
-            }}
-          >
-            Powrót do logowania
-          </Link>
-        </div>
-      </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+        <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
+          {isSubmitting ? 'Zapisywanie…' : 'Zmień hasło'}
+        </Button>
+      </form>
+    </AuthCard>
   );
-} 
+}

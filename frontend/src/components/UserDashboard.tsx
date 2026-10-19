@@ -152,7 +152,7 @@ export function UserDashboard() {
   useEffect(() => {
     // Pobierz oferty tylko gdy próba pobrania lokalizacji została zakończona
     if (locationAttempted) {
-      // Pobierz najnowsze ogłoszenia
+      // Pobierz najnowsze oferty
       const fetchNewestOffers = async () => {
         try {
           setLoadingOffers(true);
@@ -171,10 +171,10 @@ export function UserDashboard() {
             const offers = await response.json();
             setNewestOffers(offers);
           } else {
-            console.error('Błąd pobierania najnowszych ogłoszeń:', response.status);
+            console.error('Błąd pobierania najnowszych ofert:', response.status);
           }
         } catch (error) {
-          console.error('Błąd połączenia przy pobieraniu ogłoszeń:', error);
+          console.error('Błąd połączenia przy pobieraniu ofert:', error);
         } finally {
           setLoadingOffers(false);
         }
@@ -377,7 +377,7 @@ export function UserDashboard() {
         {/* Tytuł na górze */}
         <div className="bg-white p-4 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-800">
-            Najnowsze ogłoszenia w Twojej okolicy
+            Najnowsze oferty w Twojej okolicy
           </h2>
         </div>
 
@@ -476,7 +476,7 @@ export function UserDashboard() {
             onClick={handleCreateOffer}
             className="w-full sm:w-auto px-5 sm:px-8 py-3 sm:py-4 bg-yellow-400 text-gray-900 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out shadow-md hover:bg-yellow-500 hover:-translate-y-0.5 hover:shadow-lg"
           >
-            Dodaj ogłoszenie
+            Dodaj ofertę
           </button>
           <button
             onClick={handleSearchOffers}
@@ -487,10 +487,10 @@ export function UserDashboard() {
         </div>
 
         <OfferTileSection
-          title="Najnowsze ogłoszenia w Twojej okolicy"
+          title="Najnowsze oferty w Twojej okolicy"
           offers={newestOffers}
           loading={loadingOffers}
-          emptyMessage="Brak najnowszych ogłoszeń w Twojej okolicy"
+          emptyMessage="Brak najnowszych ofert w Twojej okolicy"
           onFavoriteToggle={handleFavoriteToggle}
         />
 

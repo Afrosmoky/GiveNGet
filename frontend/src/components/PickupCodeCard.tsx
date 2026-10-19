@@ -26,26 +26,27 @@ export default function PickupCodeCard({ pickupCode, qrPayload, compact = false 
 
   return (
     <div
-      className={`flex items-center gap-4 rounded-lg border-2 border-dashed border-yellow-300 bg-yellow-50 ${
+      // flex-wrap: w wąskim panelu (szczegóły oferty) tekst schodzi pod QR zamiast się ucinać
+      className={`flex flex-wrap items-center gap-4 rounded-ui-lg border-2 border-dashed border-brand/30 bg-brand-soft ${
         compact ? 'p-3' : 'p-4'
       }`}
     >
-      <div className="shrink-0 rounded-md bg-white p-2">
+      <div className="shrink-0 rounded-ui-sm bg-white p-2 shadow-card">
         <QRCodeSVG value={payload} size={qrSize} level="M" marginSize={0} />
       </div>
-      <div className="min-w-0">
-        <p className={`font-semibold text-gray-600 ${compact ? 'text-xs' : 'text-sm'}`}>
+      <div className="min-w-[10rem] flex-1">
+        <p className={`font-semibold text-ink-muted ${compact ? 'text-xs' : 'text-sm'}`}>
           Kod odbioru
         </p>
         <p
-          className={`font-mono font-bold tracking-[0.2em] text-gray-900 ${
-            compact ? 'text-xl' : 'text-3xl'
+          className={`break-all font-mono font-bold tracking-[0.15em] text-ink ${
+            compact ? 'text-xl' : 'text-2xl'
           }`}
         >
           {pickupCode}
         </p>
         {!compact && (
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-ink-muted">
             Pokaż ten kod lub QR przy odbiorze. Pracownik sklepu potwierdzi wydanie towaru.
           </p>
         )}

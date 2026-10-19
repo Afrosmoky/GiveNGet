@@ -1,70 +1,65 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { LuCircleCheck, LuCircleX, LuKeyRound, LuShieldAlert } from 'react-icons/lu';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserData, isAuthenticated } from '../../../utils/auth';
-import { describeApiError } from '../../../utils/apiErrors';
+import { authorizedFetch, getUserData } from '../../../utils/auth';
+import { useRoleGate } from '../../../hooks/useRoleGate';
 import PickupScanner from '../../../components/PickupScanner';
+import { NETWORK_FAILURE, describePickupFailure, type PickupFailure } from '../../../components/store/pickupOutcome';
+import { Badge, Button, Card, Input, Spinner, StatusPill, cn, reservationPillStatus } from '../../../components/ui';
 import { Reservation, extractPickupCode, formatTime } from '../../../types/reservation';
 
-/** Role dopuszczone do panelu — zgodnie z regułą /api/v1/reservations/collect. */
-const ALLOWED_USER_TYPES = ['STORE_EMPLOYEE', 'ADMIN'] as const;
+type Outcome =
+  | { kind: 'success'; reservation: Reservation }
+  | { kind: 'failure'; failure: PickupFailure };
 
-type Authorization = 'checking' | 'granted' | 'denied';
+/** Długość kodu odbioru (alfabet 32 znaków, 6 pozycji) — tylko podpowiedź w UI, waliduje backend. */
+const PICKUP_CODE_LENGTH = 6;
 
 export default function StorePickupPage() {
-  const router = useRouter();
-  const [authorization, setAuthorization] = useState<Authorization>('checking');
+  // Te same role co reguła /api/v1/reservations/collect w SecurityConfig
+  const gate = useRoleGate(['STORE_EMPLOYEE', 'ADMIN']);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastCollected, setLastCollected] = useState<Reservation | null>(null);
+  const [inputHint, setInputHint] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   /** Chroni przed dubletem, gdy skaner odczyta ten sam kod kilka razy pod rząd. */
   const inFlightRef = useRef(false);
 
-  // Bramka roli. AuthGuard zna tylko fakt zalogowania, więc rolę sprawdzamy tutaj —
-  // wzorem panelu admina, ale z przekierowaniem zamiast pustej strony.
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setAuthorization('denied');
-      router.replace('/login');
-      return;
-    }
+    if (gate !== 'granted') return;
+    setIsPlatformAdmin(getUserData()?.userType === 'ADMIN');
+    inputRef.current?.focus();
+  }, [gate]);
 
-    const userType = getUserData()?.userType;
-    if (!userType || !ALLOWED_USER_TYPES.includes(userType as (typeof ALLOWED_USER_TYPES)[number])) {
-      setAuthorization('denied');
-      router.replace('/unauthorized');
-      return;
-    }
-
-    setIsPlatformAdmin(userType === 'ADMIN');
-    setAuthorization('granted');
-  }, [router]);
-
-  useEffect(() => {
-    if (authorization === 'granted') {
+  const focusInput = useCallback((select = false) => {
+    // Pole wraca do DOM w tym samym renderze — fokus po klatce
+    requestAnimationFrame(() => {
       inputRef.current?.focus();
-    }
-  }, [authorization]);
+      if (select) inputRef.current?.select();
+    });
+  }, []);
 
   const collect = useCallback(async (rawCode: string) => {
     const pickupCode = extractPickupCode(rawCode);
     if (!pickupCode) {
-      setError('Wpisz lub zeskanuj kod odbioru.');
+      setInputHint('Wpisz lub zeskanuj kod odbioru.');
       return;
     }
     if (inFlightRef.current) return;
 
     inFlightRef.current = true;
     setSubmitting(true);
-    setError(null);
+    setInputHint(null);
+    setOutcome(null);
+    // Chowamy klawiaturę na telefonie, żeby wynik był widoczny bez przewijania
+    inputRef.current?.blur();
 
     try {
       const response = await authorizedFetch(`${environment.apiUrl}/api/v1/reservations/collect`, {
@@ -75,17 +70,20 @@ export default function StorePickupPage() {
       const body = await response.text();
 
       if (!response.ok) {
-        setError(describeApiError(body, 'Nie udało się potwierdzić odbioru.'));
+        const failure = describePickupFailure(response.status, body);
+        // Przy literówce kod zostaje w polu, żeby poprawić jeden znak. Kodu odebranego,
+        // wygasłego czy z innego sklepu nie ma po co zostawiać — tylko kusiłby ponowieniem.
+        setCode(failure.retryable ? pickupCode : '');
+        setOutcome({ kind: 'failure', failure });
         return;
       }
 
-      setLastCollected(JSON.parse(body) as Reservation);
+      setOutcome({ kind: 'success', reservation: JSON.parse(body) as Reservation });
       setSessionCount((n) => n + 1);
-      // Czyścimy stan od razu: pracownik przy kasie obsługuje klientów seryjnie
       setCode('');
-      inputRef.current?.focus();
     } catch {
-      setError('Błąd połączenia z serwerem. Sprawdź połączenie internetowe.');
+      setCode(pickupCode);
+      setOutcome({ kind: 'failure', failure: NETWORK_FAILURE });
     } finally {
       inFlightRef.current = false;
       setSubmitting(false);
@@ -99,144 +97,208 @@ export default function StorePickupPage() {
     [collect]
   );
 
-  if (authorization !== 'granted') {
+  const startNext = () => {
+    setOutcome(null);
+    setCode('');
+    setInputHint(null);
+    focusInput();
+  };
+
+  const fixCode = () => {
+    setOutcome(null);
+    focusInput(true);
+  };
+
+  if (gate !== 'granted') {
     return (
       <div className="flex min-h-[50vh] items-center justify-center px-4">
-        <p className="text-gray-600">
-          {authorization === 'checking' ? 'Sprawdzanie uprawnień…' : 'Brak dostępu do tego panelu.'}
-        </p>
+        {gate === 'checking' ? <Spinner className="h-6 w-6 text-brand" /> : <p className="text-sm text-ink-muted">Brak dostępu do tego panelu.</p>}
       </div>
     );
   }
 
+  const success = outcome?.kind === 'success' ? outcome.reservation : null;
+  const failure = outcome?.kind === 'failure' ? outcome.failure : null;
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">Potwierdzanie odbioru</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Zeskanuj kod QR klienta albo wpisz kod odbioru, żeby potwierdzić wydanie towaru.
-        </p>
+    <div className="mx-auto w-full max-w-xl px-4 py-5 sm:py-10">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-ink sm:text-[28px]">Potwierdź odbiór</h1>
+          <p className="mt-1 text-sm text-ink-muted">Wpisz kod z telefonu klienta albo zeskanuj jego kod QR.</p>
+        </div>
         {sessionCount > 0 && (
-          <p className="mt-2 text-sm font-semibold text-gray-700">
-            Potwierdzone w tej sesji: {sessionCount}
-          </p>
+          <Badge tone="success" size="md" className="mt-1 shrink-0">
+            Wydano: {sessionCount}
+          </Badge>
         )}
-      </header>
+      </div>
 
       {isPlatformAdmin && (
-        <div role="note" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Działasz jako administrator platformy — potwierdzenie odbioru pominie sprawdzenie, czy
-          oferta należy do Twojego sklepu. Użyj tylko wtedy, gdy pracownik sklepu nie może tego zrobić.
+        <div role="note" className="mb-4 flex gap-2.5 rounded-ui-md border border-warning/30 bg-warning-soft px-3.5 py-3 text-sm text-warning">
+          <LuShieldAlert size={18} className="mt-0.5 shrink-0" aria-hidden />
+          <p>
+            Działasz jako administrator platformy — potwierdzenie pominie sprawdzenie, czy oferta należy do Twojego
+            sklepu. Używaj tylko wtedy, gdy pracownik sklepu nie może tego zrobić.
+          </p>
         </div>
       )}
 
       <div className="flex flex-col gap-4">
-        {/* Wpisanie ręczne jest pierwsze: działa zawsze, także bez HTTPS i bez kamery */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-          <label htmlFor="pickup-code" className="mb-2 block text-base font-bold text-gray-900 sm:text-lg">
-            Kod odbioru
-          </label>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void collect(code);
-            }}
-            className="flex flex-col gap-3 sm:flex-row"
-          >
-            <input
-              ref={inputRef}
-              id="pickup-code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="np. ABC234"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              maxLength={32}
-              disabled={submitting}
-              aria-invalid={error ? true : undefined}
-              className="min-w-0 flex-1 rounded-lg border-2 border-gray-200 p-3 text-center font-mono text-2xl font-bold uppercase tracking-[0.2em] transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200 disabled:bg-gray-50"
-            />
-            <button
-              type="submit"
-              disabled={submitting || !code.trim()}
-              className="rounded-lg bg-yellow-400 px-6 py-3 font-bold text-gray-900 transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-48"
-            >
-              {submitting ? 'Potwierdzam…' : 'Potwierdź odbiór'}
-            </button>
-          </form>
-          <p className="mt-2 text-sm text-gray-500">
-            Kod ma 6 znaków. Wielkość liter nie ma znaczenia.
-          </p>
-        </div>
+        {success ? (
+          <SuccessPanel reservation={success} onNext={startNext} />
+        ) : (
+          <>
+            {failure && <FailurePanel failure={failure} onFix={fixCode} onNext={startNext} />}
 
-        <PickupScanner onScan={handleScan} paused={submitting} />
-
-        {error && (
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="font-semibold text-red-800">Nie potwierdzono odbioru</p>
-            <p className="mt-1 text-sm text-red-700">{error}</p>
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                inputRef.current?.focus();
-              }}
-              className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-            >
-              Spróbuj ponownie
-            </button>
-          </div>
+            {/* Wpisanie ręczne jest pierwsze: działa zawsze, także bez HTTPS i bez kamery */}
+            <Card padding="lg">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void collect(code);
+                }}
+                noValidate
+                className="flex flex-col gap-4"
+              >
+                <Input
+                  ref={inputRef}
+                  id="pickup-code"
+                  label="Kod odbioru"
+                  size="lg"
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value.toUpperCase());
+                    setInputHint(null);
+                  }}
+                  // Kropki zamiast przykładowego kodu: przykład wyglądał jak już wpisana wartość
+                  placeholder={'·'.repeat(PICKUP_CODE_LENGTH)}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                  // Zapas na treść QR („id:KOD”) wklejaną przez czytnik działający jak klawiatura
+                  maxLength={32}
+                  disabled={submitting}
+                  aria-invalid={failure?.retryable || inputHint ? true : undefined}
+                  error={inputHint ?? undefined}
+                  hint={`${PICKUP_CODE_LENGTH} znaków z ekranu klienta. Wielkość liter nie ma znaczenia.`}
+                  className="!h-16 !px-3 text-center font-mono !text-3xl font-semibold uppercase tracking-[0.3em] sm:!h-20 sm:!text-4xl"
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  fullWidth
+                  loading={submitting}
+                  disabled={!code.trim()}
+                  className="!h-14 !text-lg"
+                >
+                  {submitting ? 'Potwierdzam…' : 'Potwierdź odbiór'}
+                </Button>
+              </form>
+            </Card>
+          </>
         )}
 
-        {lastCollected && <CollectedSummary reservation={lastCollected} />}
+        {/* Skaner wstrzymany, gdy na ekranie jest wynik: ten sam QR odczytany drugi raz
+            nadpisałby „Odebrano” komunikatem „Już odebrana”. „Następny” wznawia skanowanie. */}
+        <PickupScanner
+          onScan={handleScan}
+          paused={submitting || outcome !== null}
+          pausedLabel={submitting ? 'Potwierdzam odbiór…' : 'Skanowanie wstrzymane — dotknij „Następny”, żeby skanować dalej.'}
+        />
       </div>
     </div>
   );
 }
 
 /**
- * Potwierdzenie ostatniego odbioru. Zostaje na ekranie obok formularza, a nie zamiast niego —
- * pracownik widzi, co właśnie wydał, i jednocześnie może obsłużyć kolejnego klienta.
+ * Potwierdzenie odbioru. Zastępuje formularz, żeby przy kasie nie było wątpliwości, co
+ * właśnie się stało; „Następny” jednym tapnięciem wraca do pustego pola.
  */
-function CollectedSummary({ reservation }: { reservation: Reservation }) {
+function SuccessPanel({ reservation, onNext }: { reservation: Reservation; onNext: () => void }) {
   return (
-    <div className="rounded-lg border-2 border-green-300 bg-green-50 p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-600 text-lg font-bold text-white"
-        >
-          ✓
+    <section
+      role="status"
+      aria-live="polite"
+      className="overflow-hidden rounded-ui-xl border-2 border-success/40 bg-success-soft shadow-card"
+    >
+      <div className="flex flex-col items-center px-5 pb-5 pt-6 text-center sm:pt-8">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-white shadow-card sm:h-20 sm:w-20">
+          <LuCircleCheck className="h-9 w-9 sm:h-11 sm:w-11" aria-hidden />
         </span>
-        <div className="min-w-0">
-          <p className="text-base font-bold text-green-900 sm:text-lg">Odbiór potwierdzony</p>
+        <p className="mt-3 text-3xl font-bold tracking-tight text-success sm:text-4xl">Odebrano</p>
+        <StatusPill status={reservationPillStatus(reservation.status)} size="md" className="mt-2" label="Odbiór potwierdzony" />
+      </div>
 
-          <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-            <div className="flex gap-2">
-              <dt className="text-green-800/70">Oferta:</dt>
-              <dd className="font-semibold text-green-900">{reservation.offerName || reservation.offerId}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-green-800/70">Wydano sztuk:</dt>
-              <dd className="font-semibold text-green-900">{reservation.quantity}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-green-800/70">Godzina odbioru:</dt>
-              <dd className="font-semibold text-green-900">{formatTime(reservation.collectedAt)}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-green-800/70">Kod:</dt>
-              <dd className="font-mono font-semibold tracking-widest text-green-900">
-                {reservation.pickupCode}
-              </dd>
-            </div>
-          </dl>
+      <dl className="mx-4 mb-4 divide-y divide-line rounded-ui-lg border border-line bg-surface sm:mx-5">
+        <SummaryRow label="Oferta" value={reservation.offerName || reservation.offerId} strong />
+        <SummaryRow label="Ilość" value={`${reservation.quantity} szt.`} strong />
+        <SummaryRow label="Godzina odbioru" value={formatTime(reservation.collectedAt)} />
+        <SummaryRow label="Kod" value={<span className="font-mono tracking-widest">{reservation.pickupCode}</span>} />
+      </dl>
 
-          <p className="mt-3 text-sm text-green-800">Możesz obsłużyć kolejnego klienta.</p>
+      <div className="px-4 pb-4 sm:px-5 sm:pb-5">
+        {/* Fokus od razu na „Następny”: Enter albo jeden tap wraca do pustego pola */}
+        <Button variant="success" size="lg" fullWidth autoFocus onClick={onNext} className="!h-14 !text-lg">
+          Następny
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function SummaryRow({ label, value, strong }: { label: string; value: ReactNode; strong?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 px-4 py-3">
+      <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
+      <dd className={cn('min-w-0 text-right text-ink', strong ? 'text-base font-semibold' : 'text-sm font-medium')}>{value}</dd>
+    </div>
+  );
+}
+
+/** Odmowa backendu — czerwony panel nad polem kodu, z decyzją „poprawić” albo „następny klient”. */
+function FailurePanel({
+  failure,
+  onFix,
+  onNext,
+}: {
+  failure: PickupFailure;
+  onFix: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <section role="alert" className="rounded-ui-xl border-2 border-danger/40 bg-danger-soft p-4 shadow-card sm:p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-danger text-white">
+          <LuCircleX className="h-6 w-6" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xl font-bold tracking-tight text-danger">{failure.title}</p>
+            {failure.status && <StatusPill status={reservationPillStatus(failure.status)} />}
+          </div>
+          <p className="mt-1 text-sm leading-5 text-ink">{failure.message}</p>
         </div>
       </div>
-    </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {failure.retryable && (
+          <Button size="lg" variant="secondary" fullWidth leftIcon={<LuKeyRound size={18} />} onClick={onFix}>
+            Popraw kod
+          </Button>
+        )}
+        <Button
+          size="lg"
+          variant={failure.retryable ? 'secondary' : 'primary'}
+          fullWidth
+          onClick={onNext}
+          className={cn(!failure.retryable && 'sm:col-span-2')}
+        >
+          Następny klient
+        </Button>
+      </div>
+    </section>
   );
 }

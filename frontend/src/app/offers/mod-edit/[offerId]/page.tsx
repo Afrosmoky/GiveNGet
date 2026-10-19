@@ -9,6 +9,9 @@ import { AuthGuard } from '../../../../components/AuthGuard';
 import { OfferDetails } from '../../../../types/offerDetails';
 import { TransactionType, Category, getAllowedTransactionTypes } from '../../../../types/offer';
 import Image from 'next/image';
+import Link from 'next/link';
+import { LuCircleAlert, LuCircleCheck, LuExternalLink, LuImageOff, LuShieldAlert, LuTrash2 } from 'react-icons/lu';
+import { Badge, Button, Card, CardHeader, IconButton, PageHeader, Select, Spinner, Textarea, cn, consolePage } from '../../../../components/ui';
 
 interface ModeratorEditFormData {
   categoryId: number;
@@ -291,281 +294,199 @@ function ModeratorEditOfferPageContent() {
   };
 
   const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
+  const allowedTypes: TransactionType[] = selectedCategoryData
+    ? getAllowedTransactionTypes(
+        selectedCategoryData,
+        selectedSubcategory ? selectedCategoryData.subcategories.find(s => s.id === selectedSubcategory) || null : null
+      )
+    : ['free', 'exchange', 'sale'];
 
   if (loading || categoriesLoading) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className="flex h-96 items-center justify-center">
+        <Spinner className="h-6 w-6 text-brand" />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !offer) {
     return (
-      <div className="text-center text-red-600 py-10">
-        {error}
-      </div>
-    );
-  }
-
-  if (!offer) {
-    return (
-      <div className="text-center text-gray-600 py-10">
-        Oferta nie została znaleziona
+      <div className={cn(consolePage, '[&>*]:max-w-4xl')}>
+        <Card role="alert" className="flex flex-col items-start gap-3">
+          <p className="flex items-center gap-2 text-sm text-danger">
+            <LuCircleAlert size={16} aria-hidden /> {error ?? 'Oferta nie została znaleziona.'}
+          </p>
+          <Button variant="secondary" size="sm" href="/admin/complaints">
+            Wróć do skarg
+          </Button>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[calc(100vh-160px)] bg-gray-50 p-2 sm:p-5">
-      <div className="max-w-5xl mx-auto w-full">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl text-gray-800 mb-6 sm:mb-10 text-center">
-          Edycja oferty przez moderatora
-        </h1>
-
-        {/* Informacja o niedostępnych polach */}
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-            </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">Ograniczenia edycji</h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p>Jako moderator możesz edytować tylko: opis, kategorię i typ transakcji.</p>
-                  <p className="mt-1">Możesz również usuwać istniejące zdjęcia, ale nie możesz dodawać nowych.</p>
-                  <p className="mt-1">Nazwa, lokalizacja, termin ważności i godziny odbioru nie mogą być zmieniane.</p>
-                </div>
-              </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 md:p-10">
-          {/* Informacje o ofercie (tylko do odczytu) */}
-          <div className="mb-6 sm:mb-8">
-            <h3 className="text-lg sm:text-xl text-gray-800 mb-4">Informacje o ofercie (tylko do odczytu)</h3>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <div>
-                <span className="text-sm font-medium text-gray-700">Nazwa: </span>
-                <span className="text-sm text-gray-900">{offer.name}</span>
-              </div>
-              <div>
-                <span className="text-sm font-medium text-gray-700">Lokalizacja: </span>
-                <span className="text-sm text-gray-900">{offer.location}</span>
-              </div>
-              {offer.expiryDate && (
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Termin ważności: </span>
-                  <span className="text-sm text-gray-900">{offer.expiryDate}</span>
-                </div>
-              )}
-              {offer.pickupDateFrom && offer.pickupDateTo && (
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Godziny odbioru: </span>
-                  <span className="text-sm text-gray-900">{offer.pickupDateFrom} - {offer.pickupDateTo}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Kategoria */}
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-              Kategoria <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={selectedCategory || ''}
-              onChange={(e) => handleCategoryChange(Number(e.target.value))}
-              className={`w-full p-3 sm:p-4 text-base sm:text-lg border-2 rounded-xl bg-white text-gray-800 cursor-pointer transition-colors focus:border-yellow-400 ${
-                errors.categoryId ? 'border-red-500' : 'border-gray-200'
-              }`}
-            >
-              <option value="">-- Wybierz kategorię --</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            {errors.categoryId && (
-              <div className="text-red-500 text-xs sm:text-sm mt-1">
-                {errors.categoryId}
-              </div>
-            )}
-          </div>
-
-          {/* Podkategoria */}
-          {selectedCategory && selectedCategoryData && selectedCategoryData.subcategories && selectedCategoryData.subcategories.length > 0 && (
-            <div className="mb-6 sm:mb-8">
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Podkategoria
-              </label>
-              <select
-                value={selectedSubcategory || ''}
-                onChange={(e) => handleSubcategoryChange(Number(e.target.value))}
-                className="w-full p-3 sm:p-4 text-base sm:text-lg border-2 border-gray-200 rounded-xl bg-white text-gray-800 cursor-pointer transition-colors focus:border-yellow-400"
-              >
-                <option value="">-- Wybierz podkategorię --</option>
-                {selectedCategoryData.subcategories.map((subcategory) => (
-                  <option key={subcategory.id} value={subcategory.id}>
-                    {subcategory.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Typ transakcji */}
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-              Typ transakcji
-            </label>
-            <select
-              value={formData.offerType}
-              onChange={(e) => handleInputChange('offerType', e.target.value as TransactionType)}
-              className="w-full p-3 sm:p-4 text-base sm:text-lg border-2 border-gray-200 rounded-lg bg-white cursor-pointer transition-colors focus:border-yellow-400"
-            >
-              {selectedCategory && categories.find(c => c.id === selectedCategory) ? (
-                getAllowedTransactionTypes(
-                  categories.find(c => c.id === selectedCategory)!,
-                  selectedSubcategory ? categories.find(c => c.id === selectedCategory)?.subcategories.find(s => s.id === selectedSubcategory) || null : null
-                ).map(type => (
-                  <option key={type} value={type}>
-                    {type === 'free' ? 'Za darmo' : type === 'exchange' ? 'Wymiana' : 'Sprzedaż'}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="free">Za darmo</option>
-                  <option value="exchange">Wymiana</option>
-                  <option value="sale">Sprzedaż</option>
-                </>
-              )}
-            </select>
-          </div>
-
-          {/* Opis */}
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-              Opis <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="Opisz szczegółowo ofertę..."
-              className={`w-full min-h-48 p-4 text-base sm:text-lg border-2 rounded-lg resize-vertical font-inherit leading-relaxed transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none ${
-                errors.description ? 'border-red-500' : 'border-gray-200'
-              }`}
-            />
-            {errors.description && (
-              <div className="text-red-500 text-xs sm:text-sm mt-1">
-                {errors.description}
-              </div>
-            )}
-          </div>
-
-          {/* Zdjęcia */}
-          <div className="mb-6 sm:mb-8">
-            <h3 className="text-lg sm:text-xl text-gray-800 mb-4 sm:mb-6">
-              Zdjęcia
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Jako moderator możesz tylko usuwać istniejące zdjęcia. Nie możesz dodawać nowych zdjęć.
-            </p>
-
-            {/* Istniejące zdjęcia */}
-            {formData.existingImages.length > 0 ? (
-              <div className="mb-4 sm:mb-6">
-                <h4 className="text-base sm:text-lg text-gray-700 mb-3 sm:mb-4">
-                  Istniejące zdjęcia (kliknij × aby usunąć):
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-                  {formData.existingImages.map((imageUrl, index) => (
-                    <div
-                      key={index}
-                      className="relative border border-gray-200 rounded-lg overflow-hidden"
-                    >
-                      <Image
-                        src={getImageUrl(imageUrl)}
-                        alt={`Istniejące zdjęcie ${index + 1}`}
-                        width={500}
-                        height={120}
-                        className="w-full h-24 sm:h-32 object-cover"
-                      />
-                      <button
-                        onClick={() => removeExistingImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white border-none rounded-full w-6 h-6 text-xs cursor-pointer flex items-center justify-center hover:bg-red-600 transition-colors"
-                        title="Usuń zdjęcie"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-500">
-                Brak zdjęć w ofercie
-              </div>
-            )}
-          </div>
-
-          {/* Powód edycji */}
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-              Powód edycji <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.reason}
-              onChange={(e) => handleInputChange('reason', e.target.value)}
-              placeholder="Opisz powód modyfikacji oferty..."
-              className={`w-full min-h-32 p-4 text-base sm:text-lg border-2 rounded-lg resize-vertical font-inherit leading-relaxed transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none ${
-                errors.reason ? 'border-red-500' : 'border-gray-200'
-              }`}
-            />
-            {errors.reason && (
-              <div className="text-red-500 text-xs sm:text-sm mt-1">
-                {errors.reason}
-              </div>
-            )}
-            <p className="text-xs text-gray-500 mt-1">
-              Powód edycji zostanie wysłany właścicielowi oferty w emailu
-            </p>
-          </div>
-
-          {/* Komunikat o wyniku */}
-          {submitMessage && (
-            <div
-              className={`p-3 sm:p-4 rounded-lg mb-4 sm:mb-6 text-center border ${
-                submitMessage.type === "success"
-                  ? "bg-green-50 border-green-300 text-gray-800"
-                  : "bg-red-50 border-red-300 text-red-600"
-              }`}
-            >
-              {submitMessage.text}
-            </div>
-          )}
-
-          {/* Przyciski */}
-          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center mt-8 sm:mt-10">
-            <button
-              onClick={() => router.push(`/offers/${offerId}`)}
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gray-200 text-gray-600 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out hover:bg-gray-300"
-            >
-              Anuluj
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-yellow-400 text-gray-900 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out shadow-md opacity-100 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-yellow-500 hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              {submitting ? "Zapisywanie..." : "Zapisz zmiany"}
-            </button>
-          </div>
+    <div className={cn(consolePage, 'space-y-4 [&>*]:max-w-4xl')}>
+      {/* Wyraźny sygnał, że to nie zwykła edycja: zmiany idą do autora z powodem */}
+      <div className="flex items-start gap-3 rounded-ui-xl border-2 border-warning/40 bg-warning-soft p-4 sm:p-5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning text-white">
+          <LuShieldAlert size={20} aria-hidden />
+        </span>
+        <div className="min-w-0 text-sm">
+          <p className="text-base font-semibold text-ink">Tryb moderacji</p>
+          <p className="mt-1 text-ink-muted">
+            Edytujesz cudzą ofertę jako moderator. Możesz zmienić opis, kategorię i typ transakcji oraz usunąć zdjęcia —
+            nazwy, lokalizacji, terminu ważności i godzin odbioru nie zmienisz. Autor dostanie e-mail z powodem edycji.
+          </p>
         </div>
       </div>
+
+      <PageHeader
+        className="!mb-0"
+        title={<>Moderacja oferty <span className="text-ink-muted">— {offer.name}</span></>}
+        actions={<Badge tone="warning" size="md" icon={<LuShieldAlert size={14} />}>Moderator</Badge>}
+      />
+
+      <Card>
+        <CardHeader title="Dane bez zmian" description="Tylko do odczytu." className="mb-3" />
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          <ReadOnlyField label="Nazwa" value={offer.name} />
+          <ReadOnlyField label="Lokalizacja" value={offer.location} />
+          {offer.expiryDate && <ReadOnlyField label="Termin ważności" value={offer.expiryDate} />}
+          {offer.pickupDateFrom && offer.pickupDateTo && (
+            <ReadOnlyField label="Godziny odbioru" value={`${offer.pickupDateFrom} – ${offer.pickupDateTo}`} />
+          )}
+        </dl>
+        <Link href={`/offers/${offerId}`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover">
+          Zobacz ofertę <LuExternalLink size={14} aria-hidden />
+        </Link>
+      </Card>
+
+      <Card>
+        <CardHeader title="Treść i kategoria" className="mb-3" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Select
+            label="Kategoria"
+            value={selectedCategory || ''}
+            onChange={(e) => handleCategoryChange(Number(e.target.value))}
+            error={errors.categoryId || undefined}
+          >
+            <option value="">Wybierz kategorię…</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </Select>
+          {selectedCategoryData && selectedCategoryData.subcategories && selectedCategoryData.subcategories.length > 0 ? (
+            <Select label="Podkategoria" value={selectedSubcategory || ''} onChange={(e) => handleSubcategoryChange(Number(e.target.value))}>
+              <option value="">Wybierz podkategorię…</option>
+              {selectedCategoryData.subcategories.map((subcategory) => (
+                <option key={subcategory.id} value={subcategory.id}>
+                  {subcategory.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
+          <Select
+            label="Typ transakcji"
+            value={formData.offerType}
+            onChange={(e) => handleInputChange('offerType', e.target.value as TransactionType)}
+          >
+            {allowedTypes.map(type => (
+              <option key={type} value={type}>
+                {TRANSACTION_LABELS[type]}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Textarea
+          containerClassName="mt-4"
+          label="Opis"
+          value={formData.description}
+          onChange={(e) => handleInputChange('description', e.target.value)}
+          placeholder="Opis oferty…"
+          rows={8}
+          error={errors.description || undefined}
+          hint={`${formData.description.trim().length} / 2000 znaków`}
+        />
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Zdjęcia"
+          description="Moderator może usuwać zdjęcia, ale nie może dodawać nowych."
+          className="mb-3"
+          actions={formData.removedImages.length > 0 && <Badge tone="danger">Do usunięcia: {formData.removedImages.length}</Badge>}
+        />
+        {formData.existingImages.length > 0 ? (
+          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            {formData.existingImages.map((imageUrl, index) => (
+              <li key={imageUrl} className="relative aspect-square overflow-hidden rounded-ui-md border border-line bg-surface-sunken">
+                <Image src={getImageUrl(imageUrl)} alt={`Zdjęcie ${index + 1}`} fill sizes="160px" className="object-cover" />
+                <span className="absolute right-1.5 top-1.5">
+                  <IconButton
+                    label={`Usuń zdjęcie ${index + 1}`}
+                    icon={<LuTrash2 size={14} />}
+                    onClick={() => removeExistingImage(index)}
+                    className="h-8 w-8 bg-surface/90 !text-danger shadow-card hover:!bg-danger hover:!text-white"
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="flex items-center gap-2 rounded-ui-md border border-dashed border-line px-3 py-6 text-sm text-ink-muted">
+            <LuImageOff size={16} aria-hidden /> Oferta nie ma zdjęć.
+          </p>
+        )}
+      </Card>
+
+      <Card className="border-warning/40">
+        <Textarea
+          label="Powód edycji"
+          value={formData.reason}
+          onChange={(e) => handleInputChange('reason', e.target.value)}
+          placeholder="Np. zmieniono kategorię — produkt nie jest nabiałem"
+          rows={3}
+          error={errors.reason || undefined}
+          hint="Wymagany. Trafi do autora oferty w e-mailu razem z informacją o zmianach."
+        />
+      </Card>
+
+      {submitMessage && (
+        <div
+          role={submitMessage.type === 'error' ? 'alert' : 'status'}
+          className={cn(
+            'flex items-center gap-2 rounded-ui-md border px-3.5 py-3 text-sm',
+            submitMessage.type === 'success' ? 'border-success/30 bg-success-soft text-brand-strong' : 'border-danger/30 bg-danger-soft text-danger'
+          )}
+        >
+          {submitMessage.type === 'success' ? <LuCircleCheck size={16} aria-hidden /> : <LuCircleAlert size={16} aria-hidden />}
+          {submitMessage.text}
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button variant="secondary" size="lg" onClick={() => router.push(`/offers/${offerId}`)}>
+          Anuluj
+        </Button>
+        <Button size="lg" loading={submitting} onClick={handleSubmit} leftIcon={<LuShieldAlert size={18} />}>
+          {submitting ? 'Zapisywanie…' : 'Zapisz jako moderator'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const TRANSACTION_LABELS: Record<TransactionType, string> = { free: 'Za darmo', exchange: 'Wymiana', sale: 'Sprzedaż' };
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="shrink-0 text-ink-muted">{label}:</dt>
+      <dd className="min-w-0 truncate font-medium text-ink">{value || '—'}</dd>
     </div>
   );
 }

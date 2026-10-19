@@ -1,18 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserLocation, updateUserData, trackOfferClick } from '../../../utils/auth';
-import { getImageUrl } from '../../../utils/imageUtils';
+import { authorizedFetch, getUserLocation, updateUserData } from '../../../utils/auth';
 import { AuthGuard } from '../../../components/AuthGuard';
 import GoogleMapComponent from '../../../components/GoogleMapComponent';
 import { useFavorites } from '../../../hooks/useFavorites';
 import { useErrorContext } from '../../../context/ErrorContext';
-import FavoriteHeart from '../../../components/FavoriteHeart';
-import Image from 'next/image';
 import { FaLocationCrosshairs } from 'react-icons/fa6';
+import { FiChevronDown, FiSearch } from 'react-icons/fi';
+import { Button, Card, CardHeader, Chip, IconButton, Input, PageHeader, Spinner } from '../../../components/ui';
 import { ApiOffer, TransactionType, Category } from '../../../types/offer';
+import OfferTile from '../../../components/OfferTile';
+import { OfferTileSkeleton } from '../../../components/offer/OfferTileSkeleton';
 
 interface LocationSuggestion {
   country: string;
@@ -37,8 +37,10 @@ interface SearchFilters {
   subcategoryIds: number[];
 }
 
+// Siatka wyników: 2 kolumny na telefonie, od sm auto-fill (stała szerokość kolumn także przy 1–2 wynikach)
+const RESULTS_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4';
+
 function SearchOffersPageContent() {
-  const router = useRouter();
   const isGpsUpdate = useRef(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [offers, setOffers] = useState<ApiOffer[]>([]);
@@ -46,12 +48,14 @@ function SearchOffersPageContent() {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
+  // Czy użytkownik już szukał — odróżnia „zacznij od lokalizacji” od „brak wyników”
+  const [hasSearched, setHasSearched] = useState(false);
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const fetchingCategoriesRef = useRef(false);
   const searchingOffersRef = useRef(false);
   
   // Obsługa ulubionych
-  const { toggleFavorite, loading: favoriteLoading } = useFavorites();
+  const { toggleFavorite } = useFavorites();
   const { addError } = useErrorContext();
 
   // Stan dla wyszukiwania lokalizacji
@@ -363,6 +367,7 @@ function SearchOffersPageContent() {
     searchingOffersRef.current = true;
     try {
       setSearching(true);
+      setHasSearched(true);
       setError(null);
 
       const params = new URLSearchParams();
@@ -398,45 +403,21 @@ function SearchOffersPageContent() {
     }
   };
 
-  const getTransactionTypeLabel = (type: string) => {
-    switch (type) {
-      case 'free': return 'Za darmo';
-      case 'exchange': return 'Wymiana';
-      case 'sale': return 'Sprzedaż';
-      default: return type;
-    }
-  };
 
-  const handleOfferClick = (offer: ApiOffer) => {
-    // Zapisz kliknięcie w ofertę dla statystyk CTR
-    trackOfferClick(offer.id);
-    
-    // Konwertuj nazwę na URL-friendly format (usunąć spacje, znaki specjalne)
-    const urlName = offer.name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '') // Usuń znaki specjalne
-      .replace(/\s+/g, '-') // Zamień spacje na myślniki
-      .replace(/-+/g, '-') // Usuń wielokrotne myślniki
-      .trim();
-    
-    router.push(`/offers/${offer.id}/${urlName}`);
-  };
-
-  const handleFavoriteClick = async (offer: ApiOffer, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const newFavoriteState = await toggleFavorite(offer.id, offer.isFavorite || false, addError);
+  // Kafelek sam robi stopPropagation i liczy kliknięcia; tu tylko stan listy
+  const handleFavoriteToggle = async (offerId: string, currentIsFavorite: boolean) => {
+    const newFavoriteState = await toggleFavorite(offerId, currentIsFavorite, addError);
     if (newFavoriteState !== undefined) {
-      setOffers(prevOffers => 
-        prevOffers.map(o => 
-          o.id === offer.id 
+      setOffers(prevOffers =>
+        prevOffers.map(o =>
+          o.id === offerId
             ? { ...o, isFavorite: newFavoriteState }
             : o
         )
       );
     }
   };
+
 
   // Pobierz wszystkie podkategorie z wybranych kategorii
   const selectedSubcategories = categories
@@ -455,316 +436,258 @@ function SearchOffersPageContent() {
 
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="flex justify-center items-center h-64">
-          <div className="loading-spinner"></div>
-        </div>
+      <div className="flex h-64 items-center justify-center text-brand">
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
 
+  const selectClass =
+    'h-10 w-full rounded-ui-md border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
+  const labelClass = 'mb-1.5 block text-sm font-medium text-ink';
+  const groupLabelClass = 'mb-2 block text-xs font-semibold uppercase tracking-wide text-ink-subtle';
+
   return (
-    <div className="page-container">
-      <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 md:px-6">
-        <div className="header-with-back">
-          <h1 className="page-title">Wyszukaj oferty</h1>
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="Wyszukaj oferty"
+        description="Ustaw lokalizację i filtry, żeby zobaczyć oferty w Twojej okolicy."
+      />
+
+      {error && (
+        <div role="alert" className="mb-4 rounded-ui-md border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+          {error}
         </div>
+      )}
 
-        {error && (
-          <div className="message-box error mb-4">
-            {error}
-          </div>
-        )}
+      {/* Filtry */}
+      <Card padding="lg" className="mb-4 sm:mb-6">
+        <CardHeader title="Filtry wyszukiwania" />
 
-        {/* Filtry */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6">
-          <h2 className="section-title mb-4">Filtry wyszukiwania</h2>
-
-          {/* Lokalizacja */}
-          <div className="mb-4 sm:mb-6">
-            <label className="form-label">Lokalizacja</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={locationInput}
-                onChange={(e) => setLocationInput(e.target.value)}
-                placeholder="Wpisz nazwę miasta lub miejscowości lub kliknij ikonę GPS"
-                className="form-input w-full pr-12 sm:pr-14"
-              />
-              <div
-                className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 transition-all duration-200 hover:text-yellow-400 hover:scale-110 z-10"
-                onClick={getCurrentLocation}
-                title="Użyj mojej lokalizacji GPS"
-              >
-                <FaLocationCrosshairs size={20} />
-              </div>
-              {locationSearching && (
-                <div className="absolute right-12 sm:right-14 top-1/2 transform -translate-y-1/2">
-                  <div className="loading-spinner w-4 h-4"></div>
-                </div>
-              )}
-              {showLocationSuggestions && (
-                <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {locationSuggestions.map((suggestion, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleLocationSelect(suggestion)}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                    >
-                      <div className="font-medium">{suggestion.formatted}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {errors.location && <p className="text-red-500 text-sm mt-1">{errors.location}</p>}
-          </div>
-
-          {/* Zasięg i jednostka */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
-            <div>
-              <label className="form-label">Zasięg</label>
-              <div className="relative">
-                <select
-                  value={filters.range ? filters.range.toString() : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value) {
-                      setFilters(prev => ({ ...prev, range: parseInt(value) }));
-                    } else {
-                      setFilters(prev => ({ ...prev, range: undefined }));
-                    }
-                  }}
-                  className="form-input w-full"
-                >
-                  <option value="">Wybierz zasięg</option>
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="25">25</option>
-                </select>
-              </div>
-              {errors.range && <p className="text-red-500 text-sm mt-1">{errors.range}</p>}
-            </div>
-            <div>
-              <label className="form-label">Jednostka</label>
-              <select
-                value={filters.distanceUnit || ''}
-                onChange={(e) => setFilters(prev => ({ ...prev, distanceUnit: e.target.value as 'KILOMETERS' | 'MILES' || undefined }))}
-                className="form-input w-full"
-              >
-                <option value="">Wybierz jednostkę</option>
-                <option value="KILOMETERS">Kilometry</option>
-                <option value="MILES">Mile</option>
-              </select>
-              {errors.distanceUnit && <p className="text-red-500 text-sm mt-1">{errors.distanceUnit}</p>}
-            </div>
-          </div>
-
-          {/* Typ ogłoszenia */}
-          <div className="mb-4 sm:mb-6">
-            <label className="form-label">Typ ogłoszenia</label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleTransactionTypeToggle('free')}
-                className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm font-medium transition-colors ${
-                  filters.transactionTypes.includes('free')
-                    ? 'bg-yellow-400 text-gray-900'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Za darmo
-              </button>
-              <button
-                onClick={() => handleTransactionTypeToggle('exchange')}
-                className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm font-medium transition-colors ${
-                  filters.transactionTypes.includes('exchange')
-                    ? 'bg-yellow-400 text-gray-900'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Wymiana
-              </button>
-              <button
-                onClick={() => handleTransactionTypeToggle('sale')}
-                className={`px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-sm font-medium transition-colors ${
-                  filters.transactionTypes.includes('sale')
-                    ? 'bg-yellow-400 text-gray-900'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Sprzedaż
-              </button>
-            </div>
-          </div>
-
-          {/* Kategorie */}
-          <div className="mb-4 sm:mb-6">
-            <label className="form-label">Kategorie</label>
-            <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+        {/* Lokalizacja */}
+        <div className="relative mb-5">
+          <Input
+            label="Lokalizacja"
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            placeholder="Wpisz nazwę miasta lub miejscowości lub kliknij ikonę GPS"
+            error={errors.location || undefined}
+            rightSlot={
+              <span className="flex items-center gap-1">
+                {locationSearching && <Spinner className="h-4 w-4 text-ink-subtle" />}
+                <IconButton
+                  label="Użyj mojej lokalizacji GPS"
+                  icon={<FaLocationCrosshairs size={18} />}
+                  onClick={getCurrentLocation}
+                  className="h-8 w-8 hover:text-brand"
+                />
+              </span>
+            }
+          />
+          {showLocationSuggestions && (
+            <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-ui-md border border-line bg-surface shadow-pop">
+              {locationSuggestions.map((suggestion, index) => (
                 <button
-                  key={category.id}
-                  onClick={() => handleCategoryToggle(category.id)}
-                  className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filters.categoryIds.includes(category.id)
-                      ? 'bg-yellow-400 text-gray-900'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  key={index}
+                  onClick={() => handleLocationSelect(suggestion)}
+                  className="w-full border-b border-line px-4 py-3 text-left text-sm text-ink last:border-b-0 hover:bg-surface-muted"
                 >
-                  {category.name}
+                  <div className="font-medium">{suggestion.formatted}</div>
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Podkategorie */}
-          {selectedSubcategories.length > 0 && (
-            <div className="mb-4 sm:mb-6">
-              <label className="form-label">Podkategorie</label>
-              <div className="flex flex-wrap gap-2">
-                {selectedSubcategories.map((subcategory) => (
-                  <button
-                    key={subcategory.id}
-                    onClick={() => handleSubcategoryToggle(subcategory.id)}
-                    className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      filters.subcategoryIds.includes(subcategory.id)
-                        ? 'bg-yellow-400 text-gray-900'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {subcategory.name}
-                  </button>
-                ))}
-              </div>
-            </div>
           )}
+        </div>
 
-          {/* Przycisk wyszukiwania */}
-          <div className="flex justify-center sm:justify-end">
-            <button
-              onClick={handleSearch}
-              disabled={searching}
-              className="w-full sm:w-auto py-3 sm:py-4 px-6 bg-yellow-400 text-gray-900 border-none rounded-lg font-bold cursor-pointer transition-colors hover:bg-yellow-500 disabled:bg-gray-300 disabled:cursor-not-allowed text-base flex items-center justify-center"
-              style={{ minWidth: '120px', maxWidth: '250px' }}
+        {/* Zasięg i jednostka */}
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div>
+            <label htmlFor="search-range" className={labelClass}>Zasięg</label>
+            <select
+              id="search-range"
+              value={filters.range ? filters.range.toString() : ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value) {
+                  setFilters(prev => ({ ...prev, range: parseInt(value) }));
+                } else {
+                  setFilters(prev => ({ ...prev, range: undefined }));
+                }
+              }}
+              className={selectClass}
             >
-              {searching ? (
-                <>
-                  <div className="loading-spinner w-5 h-5 mr-3"></div>
-                  <span>Wyszukiwanie...</span>
-                </>
-              ) : (
-                'Szukaj'
-              )}
-            </button>
+              <option value="">Wybierz zasięg</option>
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="25">25</option>
+            </select>
+            {errors.range && <p className="mt-1 text-xs text-danger">{errors.range}</p>}
+          </div>
+          <div>
+            <label htmlFor="search-unit" className={labelClass}>Jednostka</label>
+            <select
+              id="search-unit"
+              value={filters.distanceUnit || ''}
+              onChange={(e) => setFilters(prev => ({ ...prev, distanceUnit: e.target.value as 'KILOMETERS' | 'MILES' || undefined }))}
+              className={selectClass}
+            >
+              <option value="">Wybierz jednostkę</option>
+              <option value="KILOMETERS">Kilometry</option>
+              <option value="MILES">Mile</option>
+            </select>
+            {errors.distanceUnit && <p className="mt-1 text-xs text-danger">{errors.distanceUnit}</p>}
           </div>
         </div>
 
-        {/* Wyniki wyszukiwania */}
-        {offers.length > 0 && (
-          <>
-            {/* Mapa */}
-            {showMap && (
-              <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isMapCollapsed ? 'p-3 sm:p-6 py-4 mb-2' : 'p-3 sm:p-6 mb-2'}`}>
-                <div className="flex items-center justify-between mb-0">
-                  <h2 className="section-title m-0 mb-0">Mapa ofert</h2>
-                  <button
-                    onClick={toggleMapCollapse}
-                    className="flex items-center gap-2 px-2 sm:px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                    title={isMapCollapsed ? "Rozwiń mapę" : "Zwiń mapę"}
-                  >
-                    <svg
-                      className={`w-4 h-4 transition-transform ${isMapCollapsed ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                    <span className="hidden sm:inline">{isMapCollapsed ? "Rozwiń" : "Zwiń"}</span>
-                  </button>
-                </div>
-                {!isMapCollapsed && (
-                  <GoogleMapComponent 
+        {/* Typ oferty */}
+        <div className="mb-5">
+          <span className={groupLabelClass}>Typ oferty</span>
+          <div className="flex flex-wrap gap-2">
+            <Chip selected={filters.transactionTypes.includes('free')} onClick={() => handleTransactionTypeToggle('free')}>
+              Za darmo
+            </Chip>
+            <Chip selected={filters.transactionTypes.includes('exchange')} onClick={() => handleTransactionTypeToggle('exchange')}>
+              Wymiana
+            </Chip>
+            <Chip selected={filters.transactionTypes.includes('sale')} onClick={() => handleTransactionTypeToggle('sale')}>
+              Sprzedaż
+            </Chip>
+          </div>
+        </div>
+
+        {/* Kategorie */}
+        <div className="mb-5">
+          <span className={groupLabelClass}>Kategorie</span>
+          <div className="flex flex-wrap gap-2">
+            {categories.map((category) => (
+              <Chip
+                key={category.id}
+                selected={filters.categoryIds.includes(category.id)}
+                onClick={() => handleCategoryToggle(category.id)}
+              >
+                {category.name}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        {/* Podkategorie */}
+        {selectedSubcategories.length > 0 && (
+          <div className="mb-5">
+            <span className={groupLabelClass}>Podkategorie</span>
+            <div className="flex flex-wrap gap-2">
+              {selectedSubcategories.map((subcategory) => (
+                <Chip
+                  key={subcategory.id}
+                  selected={filters.subcategoryIds.includes(subcategory.id)}
+                  onClick={() => handleSubcategoryToggle(subcategory.id)}
+                >
+                  {subcategory.name}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Przycisk wyszukiwania */}
+        <div className="flex justify-end border-t border-line pt-4">
+          <Button
+            onClick={handleSearch}
+            loading={searching}
+            size="lg"
+            leftIcon={<FiSearch size={18} />}
+            className="w-full sm:w-auto sm:min-w-[160px]"
+          >
+            {searching ? 'Wyszukiwanie...' : 'Szukaj'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Wyniki wyszukiwania */}
+      {offers.length > 0 && (
+        <>
+          {/* Mapa */}
+          {showMap && (
+            <Card padding="md" className="mb-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-ink">Mapa ofert</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleMapCollapse}
+                  title={isMapCollapsed ? "Rozwiń mapę" : "Zwiń mapę"}
+                  rightIcon={<FiChevronDown size={16} className={`transition-transform ${isMapCollapsed ? '' : 'rotate-180'}`} />}
+                >
+                  <span className="hidden sm:inline">{isMapCollapsed ? "Rozwiń" : "Zwiń"}</span>
+                </Button>
+              </div>
+              {!isMapCollapsed && (
+                <div className="mt-3 overflow-hidden rounded-ui-md">
+                  <GoogleMapComponent
                     userLocation={getUserLocation()}
                     offers={offersForMap}
                   />
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </Card>
+          )}
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6">
-              <h2 className="section-title mb-4">Wyniki wyszukiwania ({offers.length})</h2>
-              <div className="space-y-0">
-                {offers.map((offer, index) => (
-                  <div 
-                    key={offer.id} 
-                    onClick={() => handleOfferClick(offer)}
-                    className={`flex items-start border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors p-3 ${
-                      index % 2 === 1 ? 'bg-gray-50 hover:bg-gray-100' : 'bg-transparent hover:bg-gray-50'
-                    } ${offer.recommended ? 'border-l-4 border-l-yellow-400' : ''}`}
-                  >
-                    <Image
-                      src={getImageUrl(offer.imageUrl)}
-                      alt={offer.name}
-                      width={100}
-                      height={100}
-                      className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-lg flex-shrink-0"
-                      style={{ minWidth: 80, minHeight: 80 }}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/images/food-image.svg'; // Fallback image
-                      }}
-                    />
-                    <div className="flex-1 flex flex-col justify-start ml-3 sm:ml-4 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-start w-full">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between">
-                            <h3 className="font-medium text-gray-900 text-sm sm:text-base lg:text-lg break-words leading-tight">{offer.name}</h3>
-                            <FavoriteHeart
-                              isFavorite={offer.isFavorite || false}
-                              onClick={(e) => handleFavoriteClick(offer, e)}
-                              loading={favoriteLoading(offer.id)}
-                              size={18}
-                            />
-                          </div>
-                          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                            {offer.location}
-                            {offer.distance && (
-                              <span className="ml-2 text-blue-600 font-medium">({offer.distance})</span>
-                            )}
-                          </p>
-                          {offer.recommended && (
-                            <span className="inline-block px-2 py-1 bg-yellow-400 text-yellow-900 text-xs font-medium rounded-full mt-2">
-                              Polecane
-                            </span>
-                          )}
-                        </div>
-                        {/* Etykieta transakcji */}
-                        <div className="mt-2 sm:mt-0 sm:ml-auto flex-shrink-0">
-                          <span className="inline-block px-2 sm:px-3 py-1 bg-yellow-100 text-yellow-800 text-xs sm:text-sm font-medium rounded-full">
-                            {getTransactionTypeLabel(offer.transactionType)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          <section aria-labelledby="search-results-heading">
+            <h2 id="search-results-heading" className="mb-3 text-base font-semibold text-ink">
+              Wyniki wyszukiwania <span className="font-normal text-ink-muted">({offers.length})</span>
+            </h2>
+            <div className={RESULTS_GRID}>
+              {offers.map((offer) => (
+                <OfferTile
+                  key={offer.id}
+                  {...offer}
+                  location={offer.location ?? ''}
+                  lat={offer.lat ?? 0}
+                  lon={offer.lon ?? 0}
+                  imageUrl={offer.imageUrl ?? ''}
+                  onFavoriteToggle={handleFavoriteToggle}
+                />
+              ))}
             </div>
-          </>
-        )}
+          </section>
+        </>
+      )}
 
-        {offers.length === 0 && !searching && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 text-center">
-            <p className="text-gray-500">Nie znaleziono ofert spełniających kryteria wyszukiwania.</p>
-          </div>
-        )}
-      </div>
+      {/* Wyszukiwanie w toku — szkielety w miejscu wyników */}
+      {searching && offers.length === 0 && (
+        <div className={RESULTS_GRID} aria-busy="true" aria-label="Wyszukiwanie ofert">
+          {Array.from({ length: 8 }, (_, i) => (
+            <OfferTileSkeleton key={i} />
+          ))}
+        </div>
+      )}
+
+      {/* Błąd wyszukiwania */}
+      {error && hasSearched && !searching && (
+        <Card padding="lg" className="flex flex-col items-center gap-3 text-center">
+          <p className="text-sm font-medium text-ink">Nie udało się pobrać ofert.</p>
+          <Button variant="secondary" size="sm" onClick={handleSearch}>
+            Spróbuj ponownie
+          </Button>
+        </Card>
+      )}
+
+      {/* Pusto: przed pierwszym wyszukiwaniem albo brak wyników */}
+      {offers.length === 0 && !searching && !loading && !error && (
+        <Card padding="lg" className="flex flex-col items-center gap-2 py-10 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+            <FiSearch size={22} />
+          </span>
+          <p className="text-sm font-semibold text-ink">
+            {hasSearched ? 'Brak ofert dla wybranych filtrów' : 'Zacznij od lokalizacji'}
+          </p>
+          <p className="max-w-sm text-sm text-ink-muted">
+            {hasSearched
+              ? 'Spróbuj zwiększyć zasięg albo odznaczyć część kategorii.'
+              : 'Wpisz miasto lub użyj GPS, wybierz filtry i kliknij „Szukaj”.'}
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

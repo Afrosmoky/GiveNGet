@@ -2,15 +2,20 @@
 
 import React, { useRef, useState, useCallback } from 'react';
 import OfferTile from './OfferTile';
+import { OfferTileSkeleton } from './offer/OfferTileSkeleton';
 import { OfferTileProps } from '../types/offer';
 
 export interface OfferTileListProps {
   offers: OfferTileProps[];
   loading?: boolean;
   emptyMessage?: string;
+  /** @deprecated Kafelek jest płynny, szerokość w rzędzie wyznacza lista. Ignorowane. */
   tileWidth?: number;
+  /** @deprecated Ignorowane. */
   tileHeight?: number;
+  /** @deprecated Ignorowane. */
   imageWidth?: number;
+  /** @deprecated Ignorowane. */
   imageHeight?: number;
   isEditing?: boolean;
   showStatus?: boolean;
@@ -21,10 +26,6 @@ export default function OfferTileList({
   offers,
   loading = false,
   emptyMessage = 'Brak ofert',
-  tileWidth = 200,
-  tileHeight = 220,
-  imageWidth = 150,
-  imageHeight = 90,
   isEditing = false,
   showStatus = false,
   onFavoriteToggle
@@ -69,15 +70,17 @@ export default function OfferTileList({
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-10">
-        <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className="flex gap-4 overflow-hidden py-2.5" aria-busy="true">
+        {Array.from({ length: 5 }, (_, i) => (
+          <OfferTileSkeleton key={i} className="w-[220px] shrink-0" />
+        ))}
       </div>
     );
   }
 
   if (offers.length === 0) {
     return (
-      <p className="text-gray-600 text-base text-center p-10">
+      <p className="p-10 text-center text-sm text-ink-muted">
         {emptyMessage}
       </p>
     );
@@ -110,22 +113,17 @@ export default function OfferTileList({
       {/* Kontener z ofertami */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth"
-        style={{
-          padding: '10px 0'
-        }}
+        className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth py-2.5"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {offers.map((offer) => (
-          <div key={offer.id} className="flex-shrink-0">
+          // Stała szerokość w rzędzie przewijanym poziomo — kafelek sam jest płynny
+          <div key={offer.id} className="flex w-[220px] shrink-0">
             <OfferTile
               {...offer}
-              width={tileWidth}
-              height={tileHeight}
-              imageWidth={imageWidth}
-              imageHeight={imageHeight}
+              className="w-full"
               isEditing={isEditing}
               showStatus={showStatus}
               onFavoriteToggle={onFavoriteToggle}

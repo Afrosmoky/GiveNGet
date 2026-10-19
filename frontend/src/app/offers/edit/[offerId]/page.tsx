@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { environment } from '../../../../config';
 import { authorizedFetch } from '../../../../utils/auth';
@@ -9,6 +9,8 @@ import { OfferForm } from '../../../../components/OfferForm';
 import { OfferDetails } from '../../../../types/offerDetails';
 import { TransactionType, OfferStatus, STATUS_LABELS } from '../../../../types/offer';
 import { describeApiError, parseApiError } from '../../../../utils/apiErrors';
+import { LuCircleAlert, LuCircleCheck, LuTriangleAlert } from 'react-icons/lu';
+import { Badge, Button, Card, Spinner, cn } from '../../../../components/ui';
 
 interface OfferFormData {
   categoryId: number;
@@ -22,12 +24,46 @@ interface OfferFormData {
   offerType: TransactionType;
   price?: string;
   currency?: string;
+  originalPrice?: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
   expiryDate: Date | null;
   images: File[];
   existingImages?: string[];
   originalImages?: string[];
+}
+
+/**
+ * Dane oferty z /api/offer/details → stan formularza. Czysta funkcja (poza komponentem),
+ * żeby initialData dało się zmemoizować — OfferForm pobiera kategorie przy każdej zmianie initialData.
+ */
+function transformOfferToFormData(offer: OfferDetails): Partial<OfferFormData> {
+  return {
+    name: offer.name,
+    location: offer.location,
+    lat: offer.latitude,
+    lon: offer.longitude,
+    coordinates: `${offer.longitude},${offer.latitude}`,
+    description: offer.description,
+    offerType: offer.transactionType as TransactionType,
+    // Cena wczytywana do formularza — bez tego edycja oferty sprzedażowej
+    // czyściłaby jej cenę albo wymagała wpisania jej od nowa
+    price: offer.price != null ? String(offer.price) : "",
+    currency: offer.currency || "PLN",
+    originalPrice: offer.originalPrice != null ? String(offer.originalPrice) : "",
+    pickupTimeFrom: offer.pickupDateFrom || '00:00',
+    pickupTimeTo: offer.pickupDateTo || '23:59',
+    expiryDate: offer.expiryDate ? (() => {
+      const date = new Date(offer.expiryDate);
+      console.log('Konwertuję expiryDate:', offer.expiryDate, 'na:', date);
+      return isNaN(date.getTime()) ? null : date;
+    })() : null,
+    existingImages: offer.imageUrls,
+    originalImages: offer.imageUrls, // Dodane: oryginalne obrazy do porównania
+    // Kategoria i podkategoria z backendu — formularz startuje od razu w szczegółach
+    categoryId: offer.categoryId ?? 0,
+    subcategoryId: offer.subcategoryId ?? 0
+  };
 }
 
 function EditOfferPageContent() {
@@ -141,6 +177,13 @@ function EditOfferPageContent() {
           formDataToSend.append('price', formData.price.trim().replace(',', '.'));
         }
         formDataToSend.append('currency', formData.currency || 'PLN');
+        // Edycja: brak pola = bez zmian (kontrakt dla klientów, którzy nie znają przeceny),
+        // więc opróżnione pole wysyłamy jako jawne usunięcie przeceny
+        if (formData.originalPrice?.trim()) {
+          formDataToSend.append('originalPrice', formData.originalPrice.trim().replace(',', '.'));
+        } else {
+          formDataToSend.append('clearOriginalPrice', 'true');
+        }
       }
       formDataToSend.append('pickupTimeFrom', formData.pickupTimeFrom);
       formDataToSend.append('pickupTimeTo', formData.pickupTimeTo);
@@ -234,155 +277,88 @@ function EditOfferPageContent() {
     }
   };
 
-  const transformOfferToFormData = (offer: OfferDetails): Partial<OfferFormData> => {
-    return {
-      name: offer.name,
-      location: offer.location,
-      lat: offer.latitude,
-      lon: offer.longitude,
-      coordinates: `${offer.longitude},${offer.latitude}`,
-      description: offer.description,
-              offerType: offer.transactionType as TransactionType,
-      // Cena wczytywana do formularza — bez tego edycja oferty sprzedażowej
-      // czyściłaby jej cenę albo wymagała wpisania jej od nowa
-      price: offer.price != null ? String(offer.price) : "",
-      currency: offer.currency || "PLN",
-      pickupTimeFrom: offer.pickupDateFrom || '00:00',
-      pickupTimeTo: offer.pickupDateTo || '23:59',
-      expiryDate: offer.expiryDate ? (() => {
-        const date = new Date(offer.expiryDate);
-        console.log('Konwertuję expiryDate:', offer.expiryDate, 'na:', date);
-        return isNaN(date.getTime()) ? null : date;
-      })() : null,
-      existingImages: offer.imageUrls,
-      originalImages: offer.imageUrls, // Dodane: oryginalne obrazy do porównania
-      // TODO: Dodać categoryId i subcategoryId gdy backend będzie je zwracał
-      categoryId: 0,
-      subcategoryId: 0
-    };
-  };
+  // Stała referencja — inaczej każdy render tej strony zmuszał OfferForm do ponownego pobrania kategorii
+  const initialFormData = useMemo(() => (offer ? transformOfferToFormData(offer) : undefined), [offer]);
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin"></div>
+      <div className="flex h-96 items-center justify-center">
+        <Spinner label="Wczytywanie oferty" />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !offer) {
     return (
-      <div className="text-center text-red-600 py-10">
-        {error}
-      </div>
-    );
-  }
-
-  if (!offer) {
-    return (
-      <div className="text-center text-gray-600 py-10">
-        Oferta nie została znaleziona
+      <div className="mx-auto max-w-lg px-4 py-10">
+        <Card className="text-center">
+          <p className="text-sm text-danger">{error || 'Oferta nie została znaleziona'}</p>
+          <Button href="/profile" variant="secondary" className="mt-4">
+            Wróć do ofert
+          </Button>
+        </Card>
       </div>
     );
   }
 
   return (
     <div>
-      {/* Przycisk zmiany statusu */}
-      {offer.status && offer.status !== 'PENDING_VERIFICATION' && (
-        <div className="max-w-4xl mx-auto mb-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Status oferty</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Aktualny status: <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                    offer.status === 'ACTIVE' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {STATUS_LABELS[offer.status]}
-                  </span>
-                </p>
-              </div>
-              <button
-                onClick={handleStatusChange}
-                disabled={statusLoading}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  offer.status === 'ACTIVE'
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
-                    : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {statusLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                    Ładowanie...
-                  </div>
-                ) : (
-                  offer.status === 'ACTIVE' ? 'Dezaktywuj ofertę' : 'Aktywuj ofertę'
-                )}
-              </button>
+      <div className="mx-auto w-full max-w-6xl space-y-4 px-4 pt-6 sm:px-6 lg:px-8 lg:pt-8 [&>*]:max-w-4xl">
+        {/* Status oferty i jego zmiana */}
+        {offer.status && offer.status !== 'PENDING_VERIFICATION' && (
+          <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-ink">Status oferty</h2>
+              <Badge tone={offer.status === 'ACTIVE' ? 'success' : 'neutral'} dot>
+                {STATUS_LABELS[offer.status]}
+              </Badge>
             </div>
-          </div>
-        </div>
-      )}
+            <Button
+              variant={offer.status === 'ACTIVE' ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={handleStatusChange}
+              loading={statusLoading}
+              className={offer.status === 'ACTIVE' ? '!text-danger' : undefined}
+            >
+              {statusLoading ? 'Zapisuję…' : offer.status === 'ACTIVE' ? 'Dezaktywuj ofertę' : 'Aktywuj ofertę'}
+            </Button>
+          </Card>
+        )}
 
-      {/* Komunikat o ofercie oczekującej na weryfikację */}
-      {offer.status === 'PENDING_VERIFICATION' && (
-        <div className="max-w-4xl mx-auto mb-6">
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-yellow-700">
-                  <strong>Informacja:</strong> Ta oferta oczekuje na weryfikację. 
-                  Nie możesz zmienić jej statusu do czasu zakończenia procesu weryfikacji.
-                </p>
-              </div>
-            </div>
+        {/* Oferta oczekująca na weryfikację */}
+        {offer.status === 'PENDING_VERIFICATION' && (
+          <div className="flex items-start gap-3 rounded-ui-md border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+            <LuTriangleAlert size={18} className="mt-0.5 shrink-0" aria-hidden />
+            <p>
+              <strong className="font-semibold">Oferta czeka na weryfikację.</strong> Nie możesz zmienić jej statusu do
+              czasu zakończenia weryfikacji.
+            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Komunikat o wyniku operacji (w tym zmiany statusu) */}
-      {submitMessage && (
-        <div className="max-w-4xl mx-auto mb-6">
+        {/* Komunikat o wyniku operacji (w tym zmiany statusu) */}
+        {submitMessage && (
           <div
-            className={`p-4 rounded-lg border ${
-              submitMessage.type === "success"
-                ? "bg-green-50 border-green-300 text-green-800"
-                : "bg-red-50 border-red-300 text-red-800"
-            }`}
+            role={submitMessage.type === 'error' ? 'alert' : 'status'}
+            className={cn(
+              'flex items-start gap-2 rounded-ui-md border px-4 py-3 text-sm',
+              submitMessage.type === 'success'
+                ? 'border-success/30 bg-success-soft text-brand-strong'
+                : 'border-danger/30 bg-danger-soft text-danger'
+            )}
           >
-            <div className="flex">
-              <div className="flex-shrink-0">
-                {submitMessage.type === "success" ? (
-                  <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium">
-                  {submitMessage.text}
-                </p>
-              </div>
-            </div>
+            {submitMessage.type === 'success' ? (
+              <LuCircleCheck size={18} className="mt-0.5 shrink-0" aria-hidden />
+            ) : (
+              <LuCircleAlert size={18} className="mt-0.5 shrink-0" aria-hidden />
+            )}
+            <p className="font-medium">{submitMessage.text}</p>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <OfferForm
-        initialData={transformOfferToFormData(offer)}
+        initialData={initialFormData}
         onSubmit={handleSubmit}
         isEditing={true}
         submitMessage={submitMessage}

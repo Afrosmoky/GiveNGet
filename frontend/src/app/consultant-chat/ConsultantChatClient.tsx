@@ -1,10 +1,29 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { Fragment, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { environment } from "../../config";
 import { authorizedFetch, getUserData } from "@/utils/auth";
 import { useWebSocketContext } from "@/context/WebSocketContext";
 import { isMobile } from '../../config/breakpoints';
+import { LuHeadphones, LuPlus } from 'react-icons/lu';
+import { Badge, Button, Dialog, cn, pageContainer } from '@/components/ui';
+import {
+  ChatFrame,
+  ChatHeader,
+  ChatPane,
+  ChatPlaceholder,
+  ChatSidebar,
+  Composer,
+  ConversationItem,
+  ConversationListSkeleton,
+  DaySeparator,
+  MessageBubble,
+  MessageScroller,
+  dayLabel,
+  listTimeLabel,
+  startsNewDay,
+  timeLabel,
+} from '@/components/chat/ChatUI';
 
 interface ConsultantChat {
   id: number;
@@ -62,6 +81,7 @@ export default function ConsultantChatClient() {
   const subscribeToChatsRef = useRef(wsCtx.subscribeToChats);
   const subscribedChatIdsRef = useRef<Set<number>>(new Set());
   const [isConsultantAvailable, setIsConsultantAvailable] = useState<boolean | null>(null);
+  const [confirmCloseId, setConfirmCloseId] = useState<number | null>(null);
   
   // Aktualizuj refy
   useEffect(() => {
@@ -481,8 +501,8 @@ export default function ConsultantChatClient() {
   };
 
   // Zamknij czat
+  // Potwierdzenie w oknie modalnym (confirmCloseId) zamiast natywnego confirm()
   const closeChat = async (chatId: number) => {
-    if (!confirm('Czy na pewno chcesz zamknąć ten czat?')) return;
     
     try {
       const res = await authorizedFetch(`${environment.apiUrl}/api/user/consultant-chat/${chatId}`, {
@@ -507,280 +527,190 @@ export default function ConsultantChatClient() {
     }
   };
 
-  // Formatuj datę
-  const formatDateTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('pl-PL', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
   const activeChat = chats.find(c => c.status !== 'CLOSED');
 
+  const startButton = !activeChat && (
+    <Button fullWidth leftIcon={<LuPlus size={16} />} loading={creatingChat} onClick={startNewChat}>
+      {creatingChat ? 'Tworzenie…' : 'Rozpocznij nowy czat'}
+    </Button>
+  );
+
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', background: '#f7fafc' }}>
-      {/* Lewy panel: lista czatów */}
-      <div style={{ 
-        width: isMobileView ? '100%' : '100%', 
-        maxWidth: isMobileView ? '100%' : 320, 
-        minWidth: isMobileView ? '100%' : 120, 
-        background: '#23272f', 
-        color: 'white', 
-        padding: 8, 
-        overflowY: 'auto',
-        display: isMobileView && !showChatList ? 'none' : 'block'
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 16, paddingLeft: 8 }}>Czat z konsultantem</div>
-        
-        {/* Przycisk rozpocznij nowy czat */}
-        {!activeChat && (
-          <button
-            onClick={startNewChat}
-            disabled={creatingChat}
-            style={{
-              width: '100%',
-              padding: '12px',
-              marginBottom: '12px',
-              borderRadius: '8px',
-              background: creatingChat ? '#6b7280' : '#10b981',
-              color: 'white',
-              border: 'none',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: creatingChat ? 'not-allowed' : 'pointer',
-              transition: 'background 0.2s'
-            }}
-          >
-            {creatingChat ? 'Tworzenie...' : '+ Rozpocznij nowy czat'}
-          </button>
-        )}
-
-        {loading ? (
-          <div style={{ color: 'white', textAlign: 'center', marginTop: 32 }}>Ładowanie...</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {chats.map(chat => (
-              <div
-                key={chat.id}
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  background: selectedChatId === chat.id ? '#374151' : '#23272f',
-                  cursor: 'pointer',
-                  marginBottom: 2,
-                  transition: 'background 0.2s',
-                  border: selectedChatId === chat.id ? '1px solid #4f46e5' : '1px solid transparent'
-                }}
-                onClick={() => {
-                  setSelectedChatId(chat.id);
-                  router.replace(`/consultant-chat?chatId=${chat.id}`);
-                  if (isMobileView) {
-                    setShowChatList(false);
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ 
-                    width: 32, 
-                    height: 32, 
-                    borderRadius: '50%', 
-                    background: chat.status === 'CLOSED' ? '#6b7280' : '#4f46e5',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: 16
-                  }}>
-                    💬
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                      Konsultant
-                    </div>
-                    <div style={{ fontSize: 13, color: '#d1d5db', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                      {chat.lastMessagePreview || 'Brak wiadomości'}
-                    </div>
-                    {chat.status === 'CLOSED' && (
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                        Zamknięty
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Prawy panel: okno rozmowy */}
-      <div style={{ 
-        flex: 1, 
-        background: 'white', 
-        flexDirection: 'column', 
-        height: '100%',
-        display: isMobileView && showChatList ? 'none' : 'flex'
-      }}>
-        {/* Komunikat o dostępności konsultanta - zawsze widoczny na górze */}
-        {isConsultantAvailable !== null && (
-          <div style={{ 
-            padding: 12, 
-            background: isConsultantAvailable ? '#dbeafe' : '#fef3c7', 
-            borderBottom: '1px solid #e5e7eb',
-            textAlign: 'center',
-            fontSize: 14,
-            color: '#1e293b',
-            fontWeight: 500
-          }}>
-            {isConsultantAvailable 
-              ? 'Połączono z konsultantem. Przy dużym obłożeniu odpowiedź może potrwać.'
-              : 'Konsultanci są dostępni 10–18. Zostaw wiadomość – odpiszemy po otwarciu biura.'}
-          </div>
-        )}
-
-        {selectedChatId && selectedChat ? (
-          <>
-            {/* Pasek górny */}
-            <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#f7fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {isMobileView && (
-                  <button
+    <div className={cn(pageContainer, 'py-4 md:py-6')}>
+      <ChatFrame>
+        {/* Lewy panel: lista czatów */}
+        <ChatSidebar title="Czat z konsultantem" hidden={isMobileView && !showChatList} actions={startButton || undefined}>
+          {loading ? (
+            <ConversationListSkeleton />
+          ) : chats.length === 0 ? (
+            <ChatPlaceholder
+              icon={<LuHeadphones size={22} aria-hidden />}
+              title="Nie masz jeszcze rozmów"
+              description="Masz pytanie o ofertę, rezerwację albo konto? Rozpocznij czat — odpowie ktoś z zespołu Biovlo."
+            />
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {chats.map(chat => (
+                <li key={chat.id}>
+                  <ConversationItem
+                    name={chat.moderatorName ? `Konsultant · ${chat.moderatorName}` : 'Konsultant'}
+                    icon={<LuHeadphones size={20} aria-hidden />}
+                    preview={chat.lastMessagePreview}
+                    time={listTimeLabel(chat.lastMessageAt ?? chat.createdAt)}
+                    selected={selectedChatId === chat.id}
+                    badge={<ConsultantStatusBadge status={chat.status} />}
                     onClick={() => {
-                      setShowChatList(true);
-                      setSelectedChatId(null);
+                      setSelectedChatId(chat.id);
+                      router.replace(`/consultant-chat?chatId=${chat.id}`);
+                      if (isMobileView) {
+                        setShowChatList(false);
+                      }
                     }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#4f46e5',
-                      fontSize: 18,
-                      cursor: 'pointer',
-                      padding: 4,
-                      borderRadius: 4
-                    }}
-                  >
-                    ←
-                  </button>
-                )}
-                <div style={{ fontWeight: 600, fontSize: 18, color: '#23272f' }}>
-                  Konsultant
-                </div>
-              </div>
-              {selectedChat.status !== 'CLOSED' && (
-                <button
-                  onClick={() => closeChat(selectedChat.id)}
-                  style={{
-                    background: '#ef4444',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 8,
-                    padding: '8px 16px',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Zamknij czat
-                </button>
-              )}
-            </div>
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </ChatSidebar>
 
-            {/* Wiadomości */}
-            <div 
-              ref={messagesContainerRef}
-              style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#f9fafb', display: 'flex', flexDirection: 'column' }}
+        {/* Prawy panel: okno rozmowy */}
+        <ChatPane hidden={isMobileView && showChatList}>
+          {/* Komunikat o dostępności konsultanta - zawsze widoczny na górze */}
+          {isConsultantAvailable !== null && (
+            <div
+              className={cn(
+                'flex items-center justify-center gap-2 border-b px-4 py-2 text-center text-xs font-medium',
+                isConsultantAvailable ? 'border-success/20 bg-success-soft text-brand-strong' : 'border-warning/20 bg-warning-soft text-warning'
+              )}
             >
-              {messages.length > 0 ? (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    style={{
-                      alignSelf: msg.senderId === userId ? 'flex-end' : 'flex-start',
-                      display: 'flex',
-                      flexDirection: msg.senderId === userId ? 'row-reverse' : 'row',
-                      alignItems: 'flex-end',
-                      gap: 8,
-                      marginBottom: 8,
-                      maxWidth: '70%'
-                    }}
-                  >
-                    <div
-                      style={{
-                        background: msg.senderId === userId ? '#fbbf24' : '#e5e7eb',
-                        color: '#23272f',
-                        borderRadius: 16,
-                        padding: '8px 16px',
-                        wordBreak: 'break-word',
-                        fontSize: 15,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                      }}
-                    >
-                      <div style={{ fontWeight: 500 }}>{msg.content}</div>
-                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-                        {formatDateTime(msg.timestamp)}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div style={{ color: '#6b7280', textAlign: 'center', marginTop: 32 }}>
-                  Brak wiadomości
-                </div>
-              )}
+              <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-full', isConsultantAvailable ? 'bg-success' : 'bg-warning')} />
+              {isConsultantAvailable
+                ? 'Konsultanci są dostępni. Przy dużym obłożeniu odpowiedź może chwilę potrwać.'
+                : 'Konsultanci są dostępni 10–18. Zostaw wiadomość — odpiszemy po otwarciu biura.'}
             </div>
+          )}
 
-            {/* Pole do wpisywania wiadomości */}
-            {selectedChat.status !== 'CLOSED' && (
-              <form
-                onSubmit={e => { e.preventDefault(); sendMessage(); }}
-                style={{ display: 'flex', padding: 16, borderTop: '1px solid #e5e7eb', background: '#f7fafc' }}
-              >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  placeholder="Napisz wiadomość..."
-                  style={{ 
-                    flex: 1, 
-                    padding: 12, 
-                    borderRadius: 8, 
-                    border: '1px solid #d1d5db', 
-                    fontSize: 15, 
-                    outline: 'none', 
-                    marginRight: 8
-                  }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                />
-                <button
-                  type="submit"
-                  disabled={!input.trim()}
-                  style={{ 
-                    background: input.trim() ? '#fbbf24' : '#d1d5db', 
-                    color: '#23272f', 
-                    border: 'none', 
-                    borderRadius: 8, 
-                    padding: '0 20px', 
-                    fontWeight: 600, 
-                    fontSize: 15, 
-                    cursor: input.trim() ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Wyślij
-                </button>
-              </form>
-            )}
+          {selectedChatId && selectedChat ? (
+            <>
+              <ChatHeader
+                title="Konsultant"
+                icon={<LuHeadphones size={20} aria-hidden />}
+                subtitle={<ConsultantStatusBadge status={selectedChat.status} moderatorName={selectedChat.moderatorName} plain />}
+                onBack={
+                  isMobileView
+                    ? () => {
+                        setShowChatList(true);
+                        setSelectedChatId(null);
+                      }
+                    : undefined
+                }
+                actions={
+                  selectedChat.status !== 'CLOSED' && (
+                    <Button variant="ghost" size="sm" className="!text-danger" onClick={() => setConfirmCloseId(selectedChat.id)}>
+                      Zamknij czat
+                    </Button>
+                  )
+                }
+              />
+
+              <MessageScroller ref={messagesContainerRef}>
+                {messages.length > 0 ? (
+                  messages.map((msg, idx) => {
+                    const mine = msg.senderId === userId;
+                    const previous = messages[idx - 1];
+                    const newDay = startsNewDay(msg.timestamp, previous?.timestamp);
+                    const firstInSeries = newDay || previous?.senderId !== msg.senderId;
+                    return (
+                      <Fragment key={msg.id}>
+                        {newDay && <DaySeparator label={dayLabel(msg.timestamp)} />}
+                        <MessageBubble
+                          mine={mine}
+                          content={msg.content}
+                          time={timeLabel(msg.timestamp)}
+                          avatar={
+                            !mine && firstInSeries ? (
+                              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-brand" title={msg.senderName}>
+                                <LuHeadphones size={14} aria-hidden />
+                              </span>
+                            ) : undefined
+                          }
+                        />
+                      </Fragment>
+                    );
+                  })
+                ) : (
+                  <ChatPlaceholder
+                    icon={<LuHeadphones size={22} aria-hidden />}
+                    title="Brak wiadomości"
+                    description={selectedChat.status === 'CLOSED' ? 'Ta rozmowa jest zamknięta.' : 'Opisz swoją sprawę — konsultant odpowie w tym oknie.'}
+                  />
+                )}
+              </MessageScroller>
+
+              {selectedChat.status !== 'CLOSED' ? (
+                <Composer value={input} onChange={setInput} onSend={sendMessage} />
+              ) : (
+                <p className="border-t border-line bg-surface-muted px-4 py-3 text-center text-xs text-ink-muted">
+                  Rozmowa jest zamknięta.{!activeChat && ' Możesz rozpocząć nową z listy.'}
+                </p>
+              )}
+            </>
+          ) : (
+            <ChatPlaceholder
+              icon={<LuHeadphones size={22} aria-hidden />}
+              title={activeChat ? 'Wybierz rozmowę' : 'Porozmawiaj z konsultantem'}
+              description={activeChat ? 'Kliknij rozmowę na liście.' : 'Pomożemy z ofertą, rezerwacją albo kontem. Rozpocznij czat przyciskiem na liście.'}
+            />
+          )}
+        </ChatPane>
+      </ChatFrame>
+
+      <Dialog
+        open={confirmCloseId !== null}
+        onClose={() => setConfirmCloseId(null)}
+        title="Zamknąć czat?"
+        description="Konsultant nie zobaczy już nowych wiadomości w tej rozmowie. W razie potrzeby rozpoczniesz nową."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmCloseId(null)}>
+              Anuluj
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                const chatId = confirmCloseId;
+                setConfirmCloseId(null);
+                if (chatId !== null) void closeChat(chatId);
+              }}
+            >
+              Zamknij czat
+            </Button>
           </>
-        ) : (
-          <div style={{ color: '#6b7280', fontSize: 18, margin: 'auto', textAlign: 'center' }}>
-            {activeChat ? 'Wybierz czat z lewej strony' : 'Rozpocznij nowy czat z konsultantem'}
-          </div>
-        )}
-      </div>
+        }
+      />
     </div>
   );
 }
 
+function ConsultantStatusBadge({
+  status,
+  moderatorName,
+  plain,
+}: {
+  status: ConsultantChat['status'];
+  moderatorName?: string | null;
+  /** Bez plakietki — tekst do podtytułu nagłówka. */
+  plain?: boolean;
+}) {
+  const label =
+    status === 'CLOSED' ? 'Zamknięta' : status === 'ASSIGNED' ? (moderatorName ? `Odpowiada: ${moderatorName}` : 'Konsultant przypisany') : 'Czeka na konsultanta';
+  if (plain) return <>{label}</>;
+  const tone = status === 'CLOSED' ? 'neutral' : status === 'ASSIGNED' ? 'success' : 'warning';
+  return (
+    <Badge tone={tone} dot>
+      {label}
+    </Badge>
+  );
+}

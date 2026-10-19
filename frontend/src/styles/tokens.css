@@ -1,0 +1,102 @@
+/*
+ * Tokeny motywu Biovlo — JEDYNE źródło prawdy o kolorach, promieniach i fontach.
+ * Paleta z logo (public/brand/): primary #0C6B4C, ink #083D2E, leaf #80B040, teal #1E8F6F,
+ * pomarańcz #F09020 (tylko akcenty), złoto #E6B85A.
+ *
+ * Kolory zapisane jako trójki RGB (bez rgb()), żeby Tailwind mógł dokładać przezroczystość:
+ * `bg-brand/20` → rgb(var(--brand) / 0.2). Mapowanie na klasy: tailwind.config.js.
+ * Reskin pod nowe logo = podmiana wartości poniżej, bez dotykania komponentów.
+ *
+ * Na razie tylko jasny motyw. Ciemny dodamy jednym blokiem nadpisującym aliasy
+ * semantyczne (sekcja „Aliasy”), np. pod :root[data-theme="dark"].
+ */
+
+:root {
+  /* ---------- Kolory z logo Biovlo ---------- */
+  --brand-primary: 12 107 76;   /* #0C6B4C — CTA, przyciski (biały tekst: 6,5:1, WCAG AA) */
+  --brand-primary-hover: 10 87 64; /* #0A5740 */
+  --brand-ink: 8 61 46;         /* #083D2E — nagłówki, wordmark, tekst sidebaru */
+  --brand-leaf: 128 176 64;     /* #80B040 — jasna zieleń: subtelne tła, tinty, highlighty */
+  --brand-teal: 30 143 111;     /* #1E8F6F — akcent drugorzędny */
+  --brand-accent: 240 144 32;   /* #F09020 — pomarańcz: TYLKO drobne akcenty, nigdy główne CTA */
+  --brand-accent-ink: 150 80 0; /* #965000 — tekst na jasnym pomarańczu (kontrast AA) */
+  --brand-cream: 230 184 90;    /* #E6B85A — złoto koszyka, ciepły neutral (rzadko) */
+
+  /* ---------- Marka: skala zieleni wokół --brand-primary ---------- */
+  --biovlo-50: 232 243 238;   /* #E8F3EE */
+  --biovlo-100: 205 230 218;  /* #CDE6DA */
+  --biovlo-200: 159 207 184;  /* #9FCFB8 */
+  --biovlo-300: 107 179 147;  /* #6BB393 */
+  --biovlo-400: 52 145 108;   /* #34916C */
+  --biovlo-500: 24 124 90;    /* #187C5A */
+  --biovlo-600: var(--brand-primary);
+  --biovlo-700: var(--brand-primary-hover);
+  --biovlo-800: 9 72 54;      /* #094836 */
+  --biovlo-900: var(--brand-ink);
+
+  /* ---------- Akcent drugorzędny: teal z logo ---------- */
+  --accent-50: 230 244 239;   /* #E6F4EF */
+  --accent-100: 195 229 217;  /* #C3E5D9 */
+  --accent-200: 146 208 187;  /* #92D0BB */
+  --accent-400: 63 165 133;   /* #3FA585 */
+  --accent-600: var(--brand-teal);
+  --accent-700: 24 117 89;    /* #187559 */
+  --accent-900: 15 74 57;     /* #0F4A39 */
+
+  /* ---------- Neutralne (lekko ciepłe, pod zieleń) ---------- */
+  --neutral-0: 255 255 255;
+  --neutral-50: 247 248 245;  /* #F7F8F5 */
+  --neutral-100: 239 241 236; /* #EFF1EC */
+  --neutral-200: 226 229 221; /* #E2E5DD */
+  --neutral-300: 203 208 196; /* #CBD0C4 */
+  --neutral-400: 154 161 146; /* #9AA192 */
+  --neutral-500: 110 117 104; /* #6E7568 */
+  --neutral-600: 80 86 75;    /* #50564B */
+  --neutral-700: 58 63 54;    /* #3A3F36 */
+  --neutral-800: 38 42 35;    /* #262A23 */
+  --neutral-900: 23 26 21;    /* #171A15 */
+
+  /* ---------- Semantyczne ---------- */
+  /* Semantyka niezależna od marki: sukces = zieleń, ostrzeżenie/wygaśnięcie = bursztyn
+     (osobno od pomarańczu --brand-accent), błąd = czerwień */
+  --success: 59 109 17;       /* #3B6D11 */
+  --success-soft: 234 243 222; /* #EAF3DE */
+  --warning: 183 121 31;      /* #B7791F */
+  --warning-soft: 253 243 225; /* #FDF3E1 */
+  --danger: 197 48 48;        /* #C53030 */
+  --danger-soft: 253 236 236; /* #FDECEC */
+
+  /* ---------- Aliasy (tego używają komponenty) ---------- */
+  --brand: var(--brand-primary);
+  --brand-hover: var(--brand-primary-hover);
+  --brand-soft: 237 244 228;  /* #EDF4E4 — tint --brand-leaf (~14%) */
+  --brand-strong: var(--brand-ink);
+  --brand-contrast: var(--neutral-0);
+
+  --surface: var(--neutral-0);
+  --surface-muted: var(--neutral-50);
+  --surface-sunken: var(--neutral-100);
+
+  --line: var(--neutral-200);
+  --line-strong: var(--neutral-300);
+
+  --ink: var(--neutral-900);
+  --ink-muted: var(--neutral-600);
+  --ink-subtle: var(--neutral-400);
+
+  /* ---------- Promienie ---------- */
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+
+  /* ---------- Typografia ---------- */
+  /* --font-geist-sans ustawia next/font w app/layout.tsx */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---------- Wymiary powłok ---------- */
+  --shell-topbar-h: 64px;
+  --shell-sidebar-w: 248px;
+  --shell-bottomnav-h: 64px;
+}

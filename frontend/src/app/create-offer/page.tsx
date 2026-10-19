@@ -21,6 +21,7 @@ interface OfferFormData {
   offerType: TransactionType;
   price?: string;
   currency?: string;
+  originalPrice?: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
   expiryDate: Date | null;
@@ -72,6 +73,10 @@ function CreateOfferPageContent() {
           formDataToSend.append('price', formData.price.trim().replace(',', '.'));
         }
         formDataToSend.append('currency', formData.currency || 'PLN');
+        // Cena przed obniżką jest opcjonalna — puste pole = oferta bez przeceny
+        if (formData.originalPrice?.trim()) {
+          formDataToSend.append('originalPrice', formData.originalPrice.trim().replace(',', '.'));
+        }
       }
       formDataToSend.append('pickupTimeFrom', formData.pickupTimeFrom);
       formDataToSend.append('pickupTimeTo', formData.pickupTimeTo);
@@ -96,7 +101,7 @@ function CreateOfferPageContent() {
         // Pokaż komunikat sukcesu
         setSubmitMessage({
           type: 'success',
-          text: responseText || 'Ogłoszenie zostało pomyślnie utworzone!'
+          text: responseText || 'Oferta została pomyślnie utworzona!'
         });
         
         // Przekieruj po 2 sekundach na profil do zakładki "My offers"

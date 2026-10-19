@@ -114,8 +114,6 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
     }
   }, [isMobile, view]);
   const sectionWidth = 700;
-  const tileWidth = 200;
-  const tileHeight = 220;
   // Ustawienia responsywne dla sekcji statystyk gwiazdek (mobile/desktop)
 
   // Funkcja do renderowania gwiazdek (statycznych)
@@ -492,10 +490,10 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
           <div>{userData.description}</div>
         </div>
       )}
-      {/* OGŁOSZENIA */}
+      {/* OFERTY */}
       <div style={{ width: computedSectionWidth, minHeight: 300, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', padding: isMobile ? 16 : 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontWeight: 'bold' }}>OGŁOSZENIA</span>
+          <span style={{ fontWeight: 'bold' }}>OFERTY</span>
           {!isMobile && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setView('tiles')} style={{ padding: 8, borderRadius: 8, border: view === 'tiles' ? '2px solid #fbbf24' : '1px solid #e2e8f0', background: view === 'tiles' ? '#f7fafc' : '#fff', color: view === 'tiles' ? '#fbbf24' : '#2d3748', fontWeight: view === 'tiles' ? 'bold' : 'normal', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Widok kafelków">
@@ -509,14 +507,9 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
         </div>
         {offers && offers.length > 0 ? (
           view === 'tiles' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? 12 : 18 }}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4">
               {offers.map((offer) => (
-                <OfferTile
-                  key={offer.id}
-                  {...offer}
-                  width={isMobile ? 160 : tileWidth}
-                  height={isMobile ? 200 : tileHeight}
-                />
+                <OfferTile key={offer.id} {...offer} />
               ))}
             </div>
           ) : (
@@ -542,7 +535,7 @@ export default function ProfileClient({ userData, offers, rate }: { userData: Us
               ))}
             </div>
           )
-        ) : <div>Brak ogłoszeń.</div>}
+        ) : <div>Brak ofert.</div>}
       </div>
 
       {/* Modal wystawiania opinii */}

@@ -23,6 +23,14 @@ const MESSAGES: Record<string, string> = {
   VALIDATION_FAILED: 'Formularz zawiera błędy — popraw zaznaczone pola.',
   CONSENT_REQUIRED: 'Aby założyć konto, zaakceptuj regulamin i politykę prywatności.',
 
+  // Logowanie (/api/auth/login). ACCOUNT_BANNED celowo bez wpisu — komunikat serwera
+  // zawiera datę końca blokady i powód, ogólny tekst by je zgubił.
+  INVALID_CREDENTIALS: 'Niepoprawny e-mail lub hasło. Sprawdź dane logowania.',
+  ACCOUNT_NOT_CONFIRMED: 'Konto nie zostało jeszcze aktywowane. Sprawdź skrzynkę e-mail.',
+  RATE_LIMIT_EXCEEDED: 'Zbyt wiele prób. Odczekaj chwilę i spróbuj ponownie.',
+  INTERNAL_ERROR: 'Wystąpił błąd serwera. Spróbuj ponownie za chwilę.',
+  INVALID_RESET_CODE: 'Link do zmiany hasła jest nieprawidłowy, wygasł albo został już użyty.',
+
   // Rezerwacje
   OFFER_NOT_AVAILABLE: 'Ta oferta nie jest już dostępna w wybranej liczbie sztuk. Odśwież stronę i sprawdź aktualną dostępność.',
   OFFER_NOT_FOUND: 'Oferta nie została znaleziona.',

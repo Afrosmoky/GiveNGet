@@ -1,84 +1,109 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
+import { LuArrowRight, LuCircleCheck } from 'react-icons/lu';
+import { ForStores } from '../components/home/ForStores';
+import { HomeHero } from '../components/home/HomeHero';
+import { HowItWorks } from '../components/home/HowItWorks';
+import { NearbyOffers } from '../components/home/NearbyOffers';
+import { Button, cn, pageContainer } from '../components/ui';
+import { useCurrentUser, type UserType } from '../hooks/useCurrentUser';
 
-export default function Home() {
-  const [showMessage, setShowMessage] = useState(false);
-  const auth = useAuth({ requireAuth: false });
-  const router = useRouter();
+/** CTA w hero zależne od tego, kto patrzy. Uprawnienia i tak egzekwuje backend — to tylko skrót. */
+function heroActions(isLoggedIn: boolean, userType: UserType | null) {
+  const browse = (href: string) => (
+    <Button href={href} size="lg" rightIcon={<LuArrowRight size={18} />}>
+      Przeglądaj oferty
+    </Button>
+  );
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const message = params.get('message');
-    if (message === 'logged-out') {
-      setShowMessage(true);
-      setTimeout(() => {
-        setShowMessage(false);
-      }, 5000);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (auth.isAuthenticated) {
-      router.push('/dashboard');
-    }
-  }, [auth.isAuthenticated, router]);
-
-  if (auth.isLoading) {
+  if (!isLoggedIn) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <p>Ładowanie...</p>
-      </div>
+      <>
+        {/* Oferty są dostępne po zalogowaniu — po nim wracamy prosto do wyszukiwarki */}
+        {browse('/login?redirect=/offers/search')}
+        <Button href="/register" variant="secondary" size="lg">
+          Załóż konto
+        </Button>
+      </>
     );
   }
 
+  switch (userType) {
+    case 'COMPANY':
+      return (
+        <>
+          <Button href="/dashboard" size="lg" rightIcon={<LuArrowRight size={18} />}>
+            Przejdź do panelu sklepu
+          </Button>
+          <Button href="/create-offer" variant="secondary" size="lg">
+            Dodaj ofertę
+          </Button>
+        </>
+      );
+    case 'ADMIN':
+    case 'EMPLOYEE':
+      return (
+        <>
+          <Button href="/admin" size="lg" rightIcon={<LuArrowRight size={18} />}>
+            Przejdź do panelu
+          </Button>
+          <Button href="/offers/search" variant="secondary" size="lg">
+            Przeglądaj oferty
+          </Button>
+        </>
+      );
+    case 'STORE_EMPLOYEE':
+      return (
+        <Button href="/store/pickup" size="lg" rightIcon={<LuArrowRight size={18} />}>
+          Potwierdź odbiór
+        </Button>
+      );
+    default:
+      return (
+        <>
+          {browse('/offers/search')}
+          <Button href="/reservations" variant="secondary" size="lg">
+            Moje rezerwacje
+          </Button>
+        </>
+      );
+  }
+}
+
+export default function Home() {
+  const { ready, isLoggedIn, user, userType } = useCurrentUser();
+  const [showLoggedOut, setShowLoggedOut] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('message') === 'logged-out') {
+      setShowLoggedOut(true);
+      const timer = setTimeout(() => setShowLoggedOut(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Najnowsze oferty tylko dla konsumenta — firma, admin i pracownik mają swoje panele
+  const isConsumer = isLoggedIn && (userType === 'REGULAR' || userType === null);
+  const greeting = isLoggedIn && user?.firstName ? `Cześć, ${user.firstName}!` : undefined;
+
   return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      {showMessage && (
-        <div style={{
-          marginBottom: '30px',
-          padding: '16px',
-          backgroundColor: '#f0fff4',
-          border: '1px solid #68d391',
-          borderRadius: '8px',
-          color: '#2d3748',
-          fontSize: '16px',
-          fontWeight: 'bold',
-          animation: 'fadeIn 0.5s ease-in'
-        }}>
-          ✅ Zostałeś pomyślnie wylogowany!
+    <div>
+      {showLoggedOut && (
+        <div role="status" className="border-b border-success/20 bg-success-soft">
+          <p className={cn(pageContainer, 'flex items-center gap-2 py-3 text-sm font-medium text-brand-strong')}>
+            <LuCircleCheck size={16} aria-hidden />
+            Wylogowano. Do zobaczenia!
+          </p>
         </div>
       )}
 
-      {!auth.isAuthenticated && (
-        <>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '20px', color: '#2d3748' }}>
-            Witaj w GiveNGet
-          </h1>
-          <p style={{ fontSize: '1.2rem', marginBottom: '40px', color: '#4a5568' }}>
-            Wygląda na to, że nie jesteś zalogowany.
-          </p>
-          
-          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/login" passHref>
-              <button className="btn-primary" style={{ minWidth: '180px' }}>Zaloguj się</button>
-            </Link>
-            <Link href="/register" passHref>
-              <button className="btn-secondary" style={{ minWidth: '180px' }}>Zarejestruj się</button>
-            </Link>
-          </div>
-        </>
-      )}
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      {/* Do odczytu sesji CTA się nie pokazują — inaczej gość/zalogowany widziałby mignięcie złych przycisków */}
+      <HomeHero greeting={greeting} actions={ready ? heroActions(isLoggedIn, userType) : <div className="h-12" />} />
+      <HowItWorks />
+      {ready && isConsumer && <NearbyOffers />}
+      {ready && !isLoggedIn && <ForStores />}
     </div>
   );
 }

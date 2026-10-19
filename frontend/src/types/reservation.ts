@@ -29,20 +29,31 @@ export interface PageResponse<T> {
   totalPages: number;
 }
 
+/** Etykiety statusu dla klienta. Kolor plakietki daje StatusPill (reservationPillStatus). */
 export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
-  RESERVED: 'Zarezerwowana',
+  RESERVED: 'Aktywna',
   COLLECTED: 'Odebrana',
   EXPIRED: 'Wygasła',
   CANCELLED: 'Anulowana',
 };
 
-/** Klasy Tailwind dla plakietki statusu — jedno źródło prawdy dla obu ekranów. */
-export const RESERVATION_STATUS_BADGE: Record<ReservationStatus, string> = {
-  RESERVED: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  COLLECTED: 'bg-green-100 text-green-800 border-green-300',
-  EXPIRED: 'bg-gray-100 text-gray-700 border-gray-300',
-  CANCELLED: 'bg-red-100 text-red-700 border-red-300',
-};
+/**
+ * Czy pokazać akcję „Rezerwuj” — jedna reguła dla szczegółów oferty i kafelka.
+ * Rezerwować może tylko konto konsumenckie (ROLE_USER wynika z UserType.REGULAR) i tylko
+ * cudzą ofertę z liczoną dostępnością. Firma, pracownik sklepu, moderator i admin zostaliby
+ * odrzuceni przez backend, więc nie pokazujemy im akcji, której nie wykonają.
+ * To tylko decyzja o widoczności — uprawnienia i dostępność egzekwuje backend.
+ */
+export function canReserveOffer(
+  viewer: { id?: number; userType?: string } | null | undefined,
+  offer: { sellerId?: number | null; availableQuantity?: number | null }
+): boolean {
+  return (
+    viewer?.userType === 'REGULAR' &&
+    viewer.id !== offer.sellerId &&
+    typeof offer.availableQuantity === 'number'
+  );
+}
 
 /** Czy rezerwację da się jeszcze anulować — backend i tak to weryfikuje. */
 export function isCancellable(reservation: Reservation): boolean {
@@ -106,3 +117,29 @@ export function isExpiredByTime(value: string | null): boolean {
   const date = parseUtcTimestamp(value);
   return !Number.isNaN(date.getTime()) && date.getTime() <= Date.now();
 }
+
+/**
+ * Rezerwacja widziana przez sklep — GET /api/v1/reservations/for-store (docs/08 #8).
+ * Bez kodu odbioru (zna go tylko klient) i bez danych kontaktowych klienta — tylko imię.
+ */
+export interface StoreReservation {
+  id: string;
+  status: ReservationStatus;
+  quantity: number;
+  offerId: string | null;
+  offerName: string | null;
+  offerImageUrl: string | null;
+  customerFirstName: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  collectedAt: string | null;
+  cancelledAt: string | null;
+}
+
+/** Etykiety statusu z perspektywy sklepu („Aktywna” klienta to dla sklepu „Do odbioru”). */
+export const STORE_RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
+  RESERVED: 'Do odbioru',
+  COLLECTED: 'Odebrana',
+  EXPIRED: 'Wygasła',
+  CANCELLED: 'Anulowana',
+};

@@ -1,183 +1,249 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { isAuthenticated, getUserData, authorizedFetch } from '../../utils/auth';
+import Link from 'next/link';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  LuBan,
+  LuChartColumn,
+  LuChevronRight,
+  LuFlag,
+  LuHeadphones,
+  LuLeaf,
+  LuPackage,
+  LuSearch,
+  LuStore,
+  LuUsers,
+} from 'react-icons/lu';
 import { environment } from '../../config';
-import { AuthGuard } from '../../components/AuthGuard';
+import { authorizedFetch, getUserData } from '../../utils/auth';
+import { Badge, Card, CardHeader, MetricCard, PageHeader, cn, consolePage } from '../../components/ui';
+import { formatCount } from '../../types/report';
+import type { PlatformStats } from '../../types/platformStats';
+import type { ComplaintDto } from '../../types/complaint';
+import { formatShortDateTime } from '../../utils/dateFormat';
 
-interface AdminData {
-  // Struktura danych z API - będzie zaktualizowana na podstawie rzeczywistej odpowiedzi
-  [key: string]: string | number | boolean | object | null;
+interface UserStats {
+  totalUsers: { total: number; active: number; banned: number };
+  companies: { total: number; active: number; banned: number };
+  registrations: { daily: number; weekly: number; monthly: number };
 }
 
-function AdminPageContent() {
-  const router = useRouter();
-  const [adminData, setAdminData] = useState<AdminData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [userData, setUserData] = useState<{ id: number; userType: string; [key: string]: unknown } | null>(null);
+interface ConsultantChatSummary {
+  status: 'OPENED' | 'ASSIGNED' | 'CLOSED';
+  moderatorId: number | null;
+}
 
-  const didInit = useRef(false);
+/** Wartość kafelka: liczba, „—” przy błędzie, null w trakcie ładowania. */
+type Count = number | 'error' | null;
+
+async function fetchJson<T>(path: string): Promise<T | 'error'> {
+  try {
+    const response = await authorizedFetch(`${environment.apiUrl}${path}`);
+    return response.ok ? ((await response.json()) as T) : 'error';
+  } catch {
+    return 'error';
+  }
+}
+
+export default function AdminDashboardPage() {
+  const [role, setRole] = useState<'ADMIN' | 'EMPLOYEE' | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [openComplaints, setOpenComplaints] = useState<ComplaintDto[] | 'error' | null>(null);
+  const [waitingChats, setWaitingChats] = useState<Count>(null);
+  const [myChats, setMyChats] = useState<Count>(null);
+  const [userStats, setUserStats] = useState<UserStats | 'error' | null>(null);
+  const [platform, setPlatform] = useState<PlatformStats | 'error' | null>(null);
 
   useEffect(() => {
-    if (didInit.current) return;
-    didInit.current = true;
+    const user = getUserData();
+    const userRole = user?.userType === 'ADMIN' ? 'ADMIN' : 'EMPLOYEE';
+    setRole(userRole);
+    setFirstName(user?.firstName ?? '');
 
-    const checkUserAccess = () => {
-      if (!isAuthenticated()) {
-        router.push('/login');
+    // Kolejka moderacji — wspólna dla admina i moderatora (/api/mod/**)
+    void fetchJson<ComplaintDto[]>('/api/mod/complaints?resolved=false').then(setOpenComplaints);
+    void fetchJson<ConsultantChatSummary[]>('/api/mod/consultant-chat').then((chats) => {
+      if (chats === 'error') {
+        setWaitingChats('error');
+        setMyChats('error');
         return;
       }
+      setWaitingChats(chats.filter((c) => c.status === 'OPENED').length);
+      setMyChats(chats.filter((c) => c.status === 'ASSIGNED' && c.moderatorId === user?.id).length);
+    });
 
-      const user = getUserData();
-      if (!user || (user.userType !== 'ADMIN' && user.userType !== 'EMPLOYEE')) {
-        router.push('/unauthorized');
-        return;
-      }
-
-      if (user && user.id && user.userType) {
-        setUserData(user as { id: number; userType: string; [key: string]: unknown });
-      }
-      fetchAdminData(user.userType);
-    };
-
-    checkUserAccess();
-  }, [router]);
-
-  const fetchAdminData = async (userType: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Wybierz endpoint na podstawie roli użytkownika
-      const endpoint = userType === 'ADMIN' 
-        ? `${environment.apiUrl}/api/admin`
-        : `${environment.apiUrl}/api/mod`;
-
-      const response = await authorizedFetch(endpoint);
-
-      if (response.ok) {
-        const responseText = await response.text();
-        setAdminData({ response: responseText });
-      } else {
-        const errorText = await response.text();
-        setError(`Błąd pobierania danych: ${errorText}`);
-      }
-    } catch (error) {
-      console.error('Błąd podczas pobierania danych administracyjnych:', error);
-      setError('Błąd połączenia z serwerem');
-    } finally {
-      setLoading(false);
+    // Liczby platformy — tylko ADMIN (/api/admin/**, /api/v1/stats/**)
+    if (userRole === 'ADMIN') {
+      void fetchJson<UserStats>('/api/admin/user-stats').then(setUserStats);
+      void fetchJson<PlatformStats>('/api/v1/stats/platform').then(setPlatform);
     }
-  };
+  }, []);
 
-  const handleRefresh = () => {
-    if (userData) {
-      fetchAdminData(userData.userType);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-3 border-gray-200 border-t-yellow-400 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Ładowanie panelu administracyjnego...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md mx-auto text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <div className="text-red-600 mb-4">
-              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-semibold text-red-800 mb-2">Błąd</h2>
-            <p className="text-red-700 mb-4">{error}</p>
-            <button
-              onClick={handleRefresh}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Spróbuj ponownie
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isAdmin = role === 'ADMIN';
+  const complaintsCount: Count = openComplaints === null || openComplaints === 'error' ? openComplaints : openComplaints.length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Panel administracyjny
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Rola: <span className="font-semibold text-blue-600">
-                  {userData?.userType === 'ADMIN' ? 'Administrator' : 'Pracownik'}
-                </span>
-              </p>
-            </div>
-            <button
-              onClick={handleRefresh}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Odśwież
-            </button>
-          </div>
-        </div>
+    <div className={consolePage}>
+      <PageHeader
+        title={firstName ? `Dzień dobry, ${firstName}` : 'Panel administracyjny'}
+        description={isAdmin ? 'Kolejka moderacji i najważniejsze liczby platformy.' : 'Kolejka moderacji: skargi i czaty z konsultantem.'}
+        actions={role && <Badge tone={isAdmin ? 'brand' : 'accent'} size="md">{isAdmin ? 'Administrator' : 'Moderator'}</Badge>}
+      />
 
-        {/* Zawartość panelu */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            Dane z API
-          </h2>
-          
-          {adminData ? (
-            <div className="space-y-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Odpowiedź z serwera:</h3>
-                <pre className="text-sm text-gray-900 whitespace-pre-wrap overflow-x-auto">
-                  {typeof adminData.response === 'string' ? adminData.response : JSON.stringify(adminData.response)}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500">Brak danych do wyświetlenia</p>
-            </div>
-          )}
+      <section aria-labelledby="queue-heading" className="mb-6">
+        <h2 id="queue-heading" className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-subtle">
+          Do zrobienia
+        </h2>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+          <LinkedMetric href="/admin/complaints" label="Nierozwiązane skargi" value={complaintsCount} icon={<LuFlag size={18} />} />
+          <LinkedMetric href="/admin/consultant-chats" label="Czaty czekające" value={waitingChats} icon={<LuHeadphones size={18} />} hint="bez przypisanego konsultanta" />
+          <LinkedMetric
+            href="/admin/consultant-chats"
+            label="Moje czaty"
+            value={myChats}
+            icon={<LuHeadphones size={18} />}
+            hint="przypisane do Ciebie"
+            className="col-span-2 lg:col-span-1"
+          />
         </div>
+      </section>
 
-        {/* Informacje o endpointach */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-blue-800 mb-2">Informacje o endpointach:</h3>
-          <div className="text-sm text-blue-700 space-y-1">
-            <p><strong>Administrator:</strong> GET {environment.apiUrl}/api/admin</p>
-            <p><strong>Pracownik:</strong> GET {environment.apiUrl}/api/mod</p>
+      {isAdmin && (
+        <section aria-labelledby="platform-heading" className="mb-6">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="platform-heading" className="text-sm font-semibold uppercase tracking-wide text-ink-subtle">
+              Platforma
+            </h2>
+            <Link href="/admin/stats" className="text-sm font-medium text-brand hover:text-brand-hover">
+              Statystyki pilotażu
+            </Link>
           </div>
-        </div>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <MetricCard
+              label="Użytkownicy"
+              value={display(userStats === null || userStats === 'error' ? userStats : userStats.totalUsers.total)}
+              hint={userStats && userStats !== 'error' ? `+${formatCount(userStats.registrations.weekly)} w 7 dni` : undefined}
+              icon={<LuUsers size={18} />}
+            />
+            <MetricCard
+              label="Sklepy (zweryfikowane)"
+              value={display(platform === null || platform === 'error' ? platform : platform.stores.verified)}
+              icon={<LuStore size={18} />}
+            />
+            <MetricCard
+              label="Aktywne oferty"
+              value={display(platform === null || platform === 'error' ? platform : platform.offers.active)}
+              icon={<LuPackage size={18} />}
+            />
+            <MetricCard
+              label="Uratowane sztuki"
+              value={display(platform === null || platform === 'error' ? platform : platform.pickups.savedUnits)}
+              hint="z potwierdzonych odbiorów"
+              icon={<LuLeaf size={18} />}
+            />
+          </div>
+        </section>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardHeader
+            title="Najnowsze nierozwiązane skargi"
+            actions={
+              <Link href="/admin/complaints" className="text-sm font-medium text-brand hover:text-brand-hover">
+                Wszystkie
+              </Link>
+            }
+          />
+          <RecentComplaints complaints={openComplaints} />
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader title="Skróty" />
+          <nav aria-label="Sekcje panelu" className="-mx-2 flex flex-col">
+            {isAdmin && <Shortcut href="/admin/users" icon={<LuUsers size={18} />} title="Użytkownicy" description="Lista kont, blokady" />}
+            <Shortcut href="/admin/complaints" icon={<LuFlag size={18} />} title="Skargi" description="Zgłoszenia, notatki, blokady ofert" />
+            {isAdmin && <Shortcut href="/admin/forbidden-words" icon={<LuBan size={18} />} title="Słowa zakazane" description="Wzorce filtrowane w treściach" />}
+            <Shortcut href="/admin/consultant-chats" icon={<LuHeadphones size={18} />} title="Czaty z konsultantem" description="Pomoc dla użytkowników" />
+            {isAdmin && <Shortcut href="/admin/stats" icon={<LuChartColumn size={18} />} title="Statystyki pilotażu" description="Liczby do rozmów z siecią" />}
+            <Shortcut href="/offers/search" icon={<LuSearch size={18} />} title="Przeglądaj oferty" description="Podgląd jak użytkownik" />
+          </nav>
+        </Card>
+      </div>
     </div>
   );
 }
 
-export default function AdminPage() {
+function display(value: Count): ReactNode {
+  if (value === null) return <span className="inline-block h-7 w-12 animate-pulse rounded-ui-sm bg-surface-sunken align-middle" aria-label="Ładowanie" />;
+  if (value === 'error') return '—';
+  return formatCount(value);
+}
+
+function LinkedMetric({
+  href,
+  label,
+  value,
+  icon,
+  hint,
+  className,
+}: {
+  href: string;
+  label: string;
+  value: Count;
+  icon: ReactNode;
+  hint?: string;
+  className?: string;
+}) {
   return (
-    <AuthGuard>
-      <AdminPageContent />
-    </AuthGuard>
+    <Link href={href} className={cn('group block rounded-ui-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40', className)}>
+      <MetricCard label={label} value={display(value)} icon={icon} hint={hint} className="h-full transition-shadow group-hover:border-line-strong group-hover:shadow-pop" />
+    </Link>
+  );
+}
+
+function Shortcut({ href, icon, title, description }: { href: string; icon: ReactNode; title: string; description: string }) {
+  return (
+    <Link href={href} className="group flex items-center gap-3 rounded-ui-md px-2 py-2.5 transition-colors hover:bg-surface-muted">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-ui-sm bg-brand-soft text-brand">{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-ink">{title}</span>
+        <span className="block truncate text-xs text-ink-muted">{description}</span>
+      </span>
+      <LuChevronRight size={16} className="shrink-0 text-ink-subtle transition-transform group-hover:translate-x-0.5" aria-hidden />
+    </Link>
+  );
+}
+
+function RecentComplaints({ complaints }: { complaints: ComplaintDto[] | 'error' | null }) {
+  if (complaints === null) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-12 animate-pulse rounded-ui-sm bg-surface-sunken" />
+        ))}
+      </div>
+    );
+  }
+  if (complaints === 'error') return <p className="text-sm text-danger">Nie udało się pobrać skarg.</p>;
+  if (complaints.length === 0) return <p className="py-6 text-center text-sm text-ink-muted">Brak nierozwiązanych skarg — kolejka jest pusta.</p>;
+
+  const recent = [...complaints].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  return (
+    <ul className="-mx-1 divide-y divide-line">
+      {recent.map((c) => (
+        <li key={c.id}>
+          <Link href="/admin/complaints" className="flex items-center gap-3 rounded-ui-sm px-1 py-2.5 hover:bg-surface-muted">
+            <Badge tone={c.type === 'CHAT' ? 'accent' : 'warning'}>{c.type === 'CHAT' ? 'Czat' : 'Oferta'}</Badge>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-ink">{c.explanation || 'Bez opisu'}</span>
+              <span className="block truncate text-xs text-ink-muted">
+                {c.reportedUserName ? `Na: ${c.reportedUserName}` : 'Brak wskazanego użytkownika'} · {formatShortDateTime(c.createdAt)}
+              </span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

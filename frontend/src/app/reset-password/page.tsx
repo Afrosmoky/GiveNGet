@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState } from 'react';
-import Image from 'next/image';
+import { LuMail } from 'react-icons/lu';
 import Link from 'next/link';
 import { environment } from '../../config';
+import { AuthCard, AuthNotice, authLinkClass } from '../../components/auth/AuthCard';
+import { Button, Input } from '../../components/ui';
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('');
@@ -89,177 +91,46 @@ export default function ResetPasswordPage() {
     }
   };
 
-  const getInputStyle = () => ({
-    width: '100%',
-    padding: '16px',
-    border: 'none',
-    borderBottom: `2px solid ${emailError ? '#ef4444' : '#e2e8f0'}`,
-    fontSize: '16px',
-    backgroundColor: 'transparent',
-    outline: 'none',
-    transition: 'border-color 0.3s',
-    color: '#2d3748'
-  });
-
-  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!emailError) {
-      e.target.style.borderBottomColor = '#fbbf24';
-    }
-  };
-
-  const handleInputBlurStyle = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (!emailError) {
-      e.target.style.borderBottomColor = '#e2e8f0';
-    }
-  };
-
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 160px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#f7fafc',
-      padding: '20px'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '16px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        width: '100%',
-        maxWidth: '400px',
-        padding: '40px',
-        textAlign: 'center'
-      }}>
-        {/* Logo */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          marginBottom: '20px'
-        }}>
-          <Image
-            src="/images/logo.png"
-            alt="GnG Logo"
-            width={150}
-            height={75}
-            style={{ objectFit: 'contain' }}
-          />
-        </div>
-
-        {/* Tytuł */}
-        <h1 style={{
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#2d3748',
-          marginBottom: '10px'
-        }}>
-          Resetowanie hasła
-        </h1>
-
-        <p style={{
-          color: '#4a5568',
-          fontSize: '14px',
-          marginBottom: '30px',
-          lineHeight: '1.4'
-        }}>
-          Podaj swój adres email, a wyślemy Ci link do resetowania hasła.
-        </p>
-
-        <form onSubmit={handleSubmit} noValidate>
-          <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '8px',
-              color: '#4a5568',
-              fontSize: '16px'
-            }}>
-              Adres email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={handleEmailChange}
-              onBlur={(e) => {
-                handleBlur();
-                handleInputBlurStyle(e);
-              }}
-              onFocus={handleInputFocus}
-              style={getInputStyle()}
-              placeholder="Wprowadź swój adres email"
-            />
-            {emailError && (
-              <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
-                {emailError}
-              </div>
-            )}
-          </div>
-
-          {/* Komunikat o wyniku wysyłania */}
-          {submitMessage && (
-            <div style={{
-              padding: '12px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              backgroundColor: submitMessage.type === 'success' ? '#f0fff4' : '#fef2f2',
-              border: `1px solid ${submitMessage.type === 'success' ? '#68d391' : '#f87171'}`,
-              color: submitMessage.type === 'success' ? '#2d3748' : '#dc2626',
-              textAlign: 'center',
-              fontSize: '14px'
-            }}>
-              {submitMessage.text}
-            </div>
-          )}
-
-          {/* Przycisk Submit */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`btn-primary ${isSubmitting ? 'btn-loading' : ''}`}
-            style={{ marginBottom: '20px' }}
-          >
-            {isSubmitting && (
-              <div className="loading-spinner" />
-            )}
-            {isSubmitting ? 'Wysyłanie...' : 'Wyślij link resetowania'}
-          </button>
-        </form>
-
-        {/* Linki nawigacyjne */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          alignItems: 'center'
-        }}>
-          <Link 
-            href="/login"
-            style={{
-              color: '#4a5568',
-              textDecoration: 'none',
-              fontSize: '14px'
-            }}
-          >
-            Powrót do logowania
+    <AuthCard
+      title="Resetowanie hasła"
+      description="Podaj adres e-mail konta, a wyślemy Ci link do ustawienia nowego hasła."
+      footer={
+        <div className="flex flex-col items-center gap-2">
+          <Link href="/login" className={authLinkClass}>
+            Wróć do logowania
           </Link>
-          <Link 
-            href="/register"
-            style={{
-              color: '#4a5568',
-              textDecoration: 'none',
-              fontSize: '14px'
-            }}
-          >
-            Nie masz konta? Zarejestruj się
-          </Link>
+          <span>
+            Nie masz konta?{' '}
+            <Link href="/register" className={authLinkClass}>
+              Zarejestruj się
+            </Link>
+          </span>
         </div>
-      </div>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <Input
+          label="Adres e-mail"
+          type="email"
+          autoComplete="email"
+          size="lg"
+          value={email}
+          onChange={handleEmailChange}
+          onBlur={handleBlur}
+          placeholder="ty@przyklad.pl"
+          error={emailError || undefined}
+          leftIcon={<LuMail size={16} />}
+        />
 
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+        {submitMessage && (
+          <AuthNotice tone={submitMessage.type === 'success' ? 'success' : 'danger'}>{submitMessage.text}</AuthNotice>
+        )}
+
+        <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
+          {isSubmitting ? 'Wysyłanie…' : 'Wyślij link resetowania'}
+        </Button>
+      </form>
+    </AuthCard>
   );
-} 
+}

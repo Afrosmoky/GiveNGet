@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRef, useState, type DragEvent } from 'react';
+import { LuCircleAlert, LuCircleCheck, LuClock, LuDownload, LuFileSpreadsheet, LuUpload, LuX } from 'react-icons/lu';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserData, isAuthenticated } from '../../../utils/auth';
+import { authorizedFetch } from '../../../utils/auth';
+import { useRoleGate } from '../../../hooks/useRoleGate';
+import { Badge, Button, Card, CardHeader, IconButton, MetricCard, PageHeader, Spinner, cn, consolePage } from '../../../components/ui';
 import { describeApiError, describeErrorCode } from '../../../utils/apiErrors';
 import { OfferImportResult } from '../../../types/offerImport';
-
-/** Import dostępny tylko dla konta firmowego — zgodnie z regułą /api/v1/offers/import. */
-const ALLOWED_USER_TYPE = 'COMPANY';
 
 /**
  * Skrót szablonu na ekranie. Źródłem prawdy jest plik z GET /api/v1/offers/import/template
@@ -26,6 +24,7 @@ const REQUIRED_COLUMNS = [
 ];
 const OPTIONAL_COLUMNS = [
   'cena',
+  'cena_przed_obnizka',
   'waluta',
   'ilosc',
   'podkategoria',
@@ -34,33 +33,34 @@ const OPTIONAL_COLUMNS = [
   'dlugosc_geo',
 ];
 
-type Authorization = 'checking' | 'granted' | 'denied';
-
 export default function OfferImportPage() {
-  const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [authorization, setAuthorization] = useState<Authorization>('checking');
+  // Import tylko dla konta firmowego — zgodnie z regułą /api/v1/offers/import
+  const authorization = useRoleGate('COMPANY');
 
   const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OfferImportResult | null>(null);
 
-  // Bramka roli: AuthGuard zna tylko fakt zalogowania, więc rolę sprawdzamy tutaj
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      setAuthorization('denied');
-      router.replace('/login');
-      return;
-    }
-    if (getUserData()?.userType !== ALLOWED_USER_TYPE) {
-      setAuthorization('denied');
-      router.replace('/unauthorized');
-      return;
-    }
-    setAuthorization('granted');
-  }, [router]);
+  const pickFile = (picked: File | null) => {
+    setFile(picked);
+    setError(null);
+  };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    // Walidację typu robi backend (rozszerzenie + sygnatura pliku) — tu tylko przekazujemy plik
+    pickFile(e.dataTransfer.files?.[0] ?? null);
+  };
+
+  const clearFile = () => {
+    setFile(null);
+    if (fileInput.current) fileInput.current.value = '';
+  };
 
   const downloadTemplate = async () => {
     setDownloading(true);
@@ -119,105 +119,109 @@ export default function OfferImportPage() {
 
   if (authorization !== 'granted') {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center px-4">
-        <p className="text-gray-600">
-          {authorization === 'checking' ? 'Sprawdzanie uprawnień…' : 'Brak dostępu do importu ofert.'}
-        </p>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Spinner label="Sprawdzanie uprawnień" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">Import ofert z Excela</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Wystaw wiele ofert naraz z pliku .xlsx. Oferty zostaną przypisane do Twojego sklepu,
-          a domyślną lokalizacją jest adres firmy.
-        </p>
-      </header>
+    <div className={consolePage}>
+      <PageHeader
+        title="Import ofert z Excela"
+        description="Wystaw wiele ofert naraz z pliku .xlsx. Oferty trafią do Twojego sklepu, a domyślną lokalizacją jest adres firmy."
+      />
 
-      {/* Szablon */}
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">1. Przygotuj plik</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Nagłówki w pierwszym wierszu, jedna oferta w każdym kolejnym. Kolejność kolumn
-              nie ma znaczenia. Szablon zawiera przykłady, instrukcję i aktualną listę kategorii.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={downloadTemplate}
-            disabled={downloading}
-            className="shrink-0 rounded-lg border-2 border-yellow-400 px-4 py-2.5 font-bold text-gray-900 transition hover:bg-yellow-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {downloading ? 'Pobieram…' : 'Pobierz szablon'}
-          </button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ColumnList title="Wymagane kolumny" columns={REQUIRED_COLUMNS} />
-          <ColumnList title="Opcjonalne kolumny" columns={OPTIONAL_COLUMNS} />
-        </div>
-        <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-gray-600">
-          <li>
-            <code>typ_transakcji</code>: <code>sprzedaz</code>, <code>za_darmo</code> albo <code>wymiana</code>.
-          </li>
-          <li>Sprzedaż wymaga ceny (np. 4.99). Oferta za darmo i wymiana nie może mieć ceny ani waluty.</li>
-          <li>
-            <code>termin_waznosci</code> w formacie RRRR-MM-DD, godziny odbioru w formacie GG:MM.
-          </li>
-          <li>Maksymalnie 500 ofert i 2 MB w jednym pliku. Formuły nie są obsługiwane.</li>
-        </ul>
-      </section>
-
-      {/* Wysyłka */}
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="text-lg font-bold text-gray-900">2. Wyślij plik</h2>
-        <form
-          className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
-          }}
-        >
-          <label htmlFor="import-file" className="sr-only">
-            Plik .xlsx
-          </label>
-          <input
-            id="import-file"
-            ref={fileInput}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              setError(null);
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+        {/* Wysyłka */}
+        <Card>
+          <CardHeader title="Wyślij plik" description="Maksymalnie 500 ofert i 2 MB w jednym pliku." />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
             }}
-            className="w-full min-w-0 rounded-lg border-2 border-gray-200 p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:font-semibold file:text-gray-800 hover:file:bg-gray-200 sm:flex-1"
-          />
-          <button
-            type="submit"
-            disabled={uploading || !file}
-            className="rounded-lg bg-yellow-400 px-5 py-2.5 font-bold text-gray-900 transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {uploading ? 'Importuję…' : 'Importuj oferty'}
-          </button>
-        </form>
+            <label
+              htmlFor="import-file"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={cn(
+                'flex cursor-pointer flex-col items-center gap-2 rounded-ui-lg border-2 border-dashed px-4 py-8 text-center transition-colors',
+                'focus-within:ring-2 focus-within:ring-brand/40',
+                dragOver ? 'border-brand bg-brand-soft' : 'border-line bg-surface-muted hover:border-line-strong'
+              )}
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-brand shadow-card" aria-hidden>
+                <LuUpload size={22} />
+              </span>
+              <span className="text-sm font-semibold text-ink">Przeciągnij plik .xlsx albo kliknij, żeby wybrać</span>
+              <span className="text-xs text-ink-muted">Arkusz Excel w formacie .xlsx (nie .xls ani .csv)</span>
+              <input
+                id="import-file"
+                ref={fileInput}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                className="sr-only"
+              />
+            </label>
 
-        {error && (
-          <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            {error}
+            {file && (
+              <div className="mt-3 flex items-center gap-3 rounded-ui-md border border-line bg-surface px-3 py-2.5">
+                <LuFileSpreadsheet size={20} className="shrink-0 text-brand" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{file.name}</span>
+                <span className="shrink-0 text-xs tabular-nums text-ink-subtle">{(file.size / 1024).toFixed(0)} KB</span>
+                <IconButton label="Usuń wybrany plik" icon={<LuX size={16} />} onClick={clearFile} className="h-8 w-8" />
+              </div>
+            )}
+
+            {error && (
+              <div role="alert" className="mt-3 flex items-start gap-2 rounded-ui-md border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger">
+                <LuCircleAlert size={16} className="mt-0.5 shrink-0" aria-hidden />
+                {error}
+              </div>
+            )}
+
+            <Button type="submit" size="lg" fullWidth loading={uploading} disabled={!file} className="mt-4">
+              {uploading ? 'Importuję…' : 'Importuj oferty'}
+            </Button>
+          </form>
+        </Card>
+
+        {/* Szablon */}
+        <Card>
+          <CardHeader
+            title="Szablon"
+            description="Nagłówki w pierwszym wierszu, jedna oferta w każdym kolejnym. Kolejność kolumn nie ma znaczenia."
+          />
+          <Button variant="secondary" fullWidth loading={downloading} onClick={downloadTemplate} leftIcon={<LuDownload size={16} />}>
+            {downloading ? 'Pobieram…' : 'Pobierz szablon .xlsx'}
+          </Button>
+          <p className="mt-2 text-xs text-ink-muted">Szablon zawiera przykłady, instrukcję i aktualną listę kategorii.</p>
+
+          <div className="mt-5 space-y-4">
+            <ColumnList title="Wymagane kolumny" columns={REQUIRED_COLUMNS} />
+            <ColumnList title="Opcjonalne kolumny" columns={OPTIONAL_COLUMNS} />
           </div>
-        )}
-      </section>
+          <ul className="mt-5 list-disc space-y-1.5 pl-5 text-sm text-ink-muted marker:text-brand">
+            <li>
+              <code className="text-ink">typ_transakcji</code>: <code className="text-ink">sprzedaz</code>, <code className="text-ink">za_darmo</code> albo <code className="text-ink">wymiana</code>.
+            </li>
+            <li>Sprzedaż wymaga ceny (np. 4.99). Oferta za darmo i wymiana nie może mieć ceny ani waluty.</li>
+            <li>
+              <code className="text-ink">termin_waznosci</code> w formacie RRRR-MM-DD, godziny odbioru w formacie GG:MM.
+            </li>
+            <li>Formuły nie są obsługiwane.</li>
+          </ul>
+        </Card>
+      </div>
 
       {result && <ImportSummary result={result} />}
-
-      <Link href="/dashboard" className="text-sm font-semibold text-gray-700 underline hover:text-gray-900">
-        ← Wróć do panelu
-      </Link>
     </div>
   );
 }
@@ -225,10 +229,10 @@ export default function OfferImportPage() {
 function ColumnList({ title, columns }: { title: string; columns: string[] }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{title}</h3>
       <div className="flex flex-wrap gap-1.5">
         {columns.map((column) => (
-          <code key={column} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-800">
+          <code key={column} className="rounded-ui-sm bg-surface-sunken px-2 py-0.5 text-xs text-ink">
             {column}
           </code>
         ))}
@@ -242,67 +246,52 @@ function ImportSummary({ result }: { result: OfferImportResult }) {
   const pendingCount = result.doWeryfikacji.length;
 
   return (
-    <section aria-live="polite" className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-      <h2 className="text-lg font-bold text-gray-900">Wynik importu</h2>
+    <section aria-live="polite" className="mt-6">
+      <h2 className="mb-3 text-lg font-semibold text-ink">Wynik importu</h2>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Stat label="Utworzone oferty" value={result.utworzone} tone="green" />
-        <Stat label="Odrzucone wiersze" value={errorCount} tone={errorCount > 0 ? 'red' : 'gray'} />
-        <Stat label="Czeka na moderację" value={pendingCount} tone={pendingCount > 0 ? 'amber' : 'gray'} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard label="Utworzone oferty" value={result.utworzone} icon={<LuCircleCheck size={18} />} />
+        <MetricCard label="Odrzucone wiersze" value={errorCount} icon={<LuCircleAlert size={18} />} className={errorCount > 0 ? 'border-danger/30' : undefined} />
+        <MetricCard label="Do weryfikacji" value={pendingCount} icon={<LuClock size={18} />} hint="czeka na moderatora" className={pendingCount > 0 ? 'border-warning/40' : undefined} />
       </div>
 
       {pendingCount > 0 && (
-        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Oferty z wierszy {result.doWeryfikacji.join(', ')} zawierają treści wymagające weryfikacji.
-          Zostały zapisane, ale będą widoczne dopiero po akceptacji moderatora.
+        <p className="mt-4 rounded-ui-md border border-warning/30 bg-warning-soft px-3 py-2.5 text-sm text-warning">
+          Oferty z wierszy {result.doWeryfikacji.join(', ')} zawierają treści wymagające weryfikacji. Zostały zapisane,
+          ale będą widoczne dopiero po akceptacji moderatora.
         </p>
       )}
 
       {errorCount > 0 ? (
-        <div className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-gray-700">
-            Wiersze z błędami — popraw je w pliku i zaimportuj ponownie tylko te wiersze
-          </h3>
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-gray-700">
-                <tr>
-                  <th scope="col" className="w-20 px-3 py-2 font-semibold">Wiersz</th>
-                  <th scope="col" className="px-3 py-2 font-semibold">Problem</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {result.bledy.map((rowError) => (
-                  <tr key={`${rowError.wiersz}-${rowError.code}`}>
-                    <td className="px-3 py-2 font-mono text-gray-900">{rowError.wiersz}</td>
-                    <td className="px-3 py-2 text-gray-800">
-                      {describeErrorCode(rowError.code, rowError.message)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <Card padding="none" className="mt-4 overflow-hidden">
+          <div className="border-b border-line px-4 py-3 sm:px-5">
+            <h3 className="text-sm font-semibold text-ink">Wiersze z błędami</h3>
+            <p className="mt-0.5 text-xs text-ink-muted">Popraw je w pliku i zaimportuj ponownie tylko te wiersze.</p>
           </div>
-        </div>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-subtle">
+                <th scope="col" className="w-20 px-4 py-2 font-medium sm:px-5">Wiersz</th>
+                <th scope="col" className="px-4 py-2 font-medium sm:px-5">Problem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.bledy.map((rowError) => (
+                <tr key={`${rowError.wiersz}-${rowError.code}`} className="border-b border-line last:border-0">
+                  <td className="px-4 py-2.5 align-top sm:px-5">
+                    <Badge tone="danger">{rowError.wiersz}</Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-ink sm:px-5">{describeErrorCode(rowError.code, rowError.message)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       ) : (
-        <p className="mt-4 text-sm text-gray-600">Wszystkie wiersze zostały zaimportowane.</p>
+        <p className="mt-4 flex items-center gap-2 text-sm text-success">
+          <LuCircleCheck size={16} aria-hidden /> Wszystkie wiersze zostały zaimportowane.
+        </p>
       )}
     </section>
-  );
-}
-
-const STAT_TONES = {
-  green: 'border-green-200 bg-green-50 text-green-900',
-  red: 'border-red-200 bg-red-50 text-red-900',
-  amber: 'border-amber-200 bg-amber-50 text-amber-900',
-  gray: 'border-gray-200 bg-gray-50 text-gray-700',
-} as const;
-
-function Stat({ label, value, tone }: { label: string; value: number; tone: keyof typeof STAT_TONES }) {
-  return (
-    <div className={`rounded-lg border p-3 ${STAT_TONES[tone]}`}>
-      <div className="text-2xl font-extrabold">{value}</div>
-      <div className="text-sm">{label}</div>
-    </div>
   );
 }

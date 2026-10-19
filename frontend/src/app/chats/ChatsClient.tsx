@@ -1,13 +1,31 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { Fragment, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { environment } from "../../config";
 import { authorizedFetch } from "@/utils/auth";
 import { getImageUrl } from "@/utils/imageUtils";
 import { useWebSocketContext } from "@/context/WebSocketContext";
-import Image from "next/image";
 import { OutgoingMessagePayload } from '../types';
 import { isMobile } from '../../config/breakpoints';
+import { LuCircleCheck, LuFlag, LuHeadphones } from 'react-icons/lu';
+import { Avatar, Button, Dialog, Textarea, cn, pageContainer } from '@/components/ui';
+import {
+  ChatFrame,
+  ChatHeader,
+  ChatPane,
+  ChatPlaceholder,
+  ChatSidebar,
+  Composer,
+  ConversationItem,
+  ConversationListSkeleton,
+  DaySeparator,
+  MessageBubble,
+  MessageScroller,
+  dayLabel,
+  listTimeLabel,
+  startsNewDay,
+  timeLabel,
+} from '@/components/chat/ChatUI';
 
 interface Chat {
   id: number;
@@ -49,9 +67,6 @@ export default function ChatsClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [showTimestampId, setShowTimestampId] = useState<number | null>(null);
-  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const hoverTimeout = useRef<NodeJS.Timeout | null>(null);
   const selectedChatIdRef = useRef<number | null>(selectedChatId);
   const wsCtx = useWebSocketContext();
   const [scrollToBottomOnNewMessage, setScrollToBottomOnNewMessage] = useState(false);
@@ -475,692 +490,193 @@ export default function ChatsClient() {
       }, 1000);
     }
   };
+  const selectedChat = chats.find(c => c.id === selectedChatId);
+  const avatarFor = (participantId: number) => {
+    const url = chats.find(c => c.otherParticipantId === participantId)?.avatarUrl;
+    return url ? getImageUrl(url) : null;
+  };
+  const backToList = () => {
+    setShowChatList(true);
+    setSelectedChatId(null);
+    // Wyczyść localStorage gdy nie ma wybranego czatu
+    localStorage.removeItem('currentSelectedChatId');
+  };
+
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', background: '#f7fafc' }}>
-      {/* Powiadomienie o pomyślnym zgłoszeniu - na górze ekranu */}
+    <div className={cn(pageContainer, 'py-4 md:py-6')}>
+      {/* Potwierdzenie zgłoszenia — znika samo po 5 s */}
       {showReportSuccess && (
-        <div style={{
-          position: 'fixed',
-          top: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#10b981',
-          color: 'white',
-          padding: '12px 20px',
-          borderRadius: 8,
-          fontSize: 14,
-          fontWeight: 500,
-          textAlign: 'center',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          zIndex: 1001,
-          minWidth: 300,
-          maxWidth: 500
-        }}>
-          ✓ Wiadomość została zgłoszona administratorom
+        <div role="status" className="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 items-center gap-2 rounded-ui-md bg-success px-4 py-2.5 text-sm font-medium text-white shadow-pop">
+          <LuCircleCheck size={16} aria-hidden /> Wiadomość została zgłoszona moderatorom
         </div>
       )}
-      {/* Lewy panel: lista czatów */}
-      <div style={{ 
-        width: isMobileView ? '100%' : '100%', 
-        maxWidth: isMobileView ? '100%' : 320, 
-        minWidth: isMobileView ? '100%' : 120, 
-        background: '#23272f', 
-        color: 'white', 
-        padding: 8, 
-        overflowY: 'auto',
-        display: isMobileView && !showChatList ? 'none' : 'block'
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 16, paddingLeft: 8 }}>Inbox</div>
-        {/* Przycisk "Czatuj z konsultantem" */}
-        <button
-          onClick={() => {
-            router.push('/consultant-chat');
-          }}
-          style={{
-            width: '100%',
-            padding: '12px',
-            marginBottom: '12px',
-            borderRadius: '8px',
-            background: '#4f46e5',
-            color: 'white',
-            border: 'none',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.background = '#4338ca';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.background = '#4f46e5';
-          }}
-        >
-          <span>💬</span>
-          <span>Czatuj z konsultantem</span>
-        </button>
-        {loading ? (
-          <div style={{ color: 'white', textAlign: 'center', marginTop: 32 }}>Ładowanie...</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {chats.map(chat => (
-              <div
-                key={chat.id}
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  background: selectedChatId === chat.id ? '#374151' : '#23272f',
-                  cursor: 'pointer',
-                  marginBottom: 2,
-                  transition: 'background 0.2s',
-                  border: selectedChatId === chat.id ? '1px solid #4f46e5' : '1px solid transparent',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2
-                }}
-                onClick={() => {
-                  setSelectedChatId(chat.id);
-                  // Aktualizuj localStorage z aktualnie wybranym chatId
-                  localStorage.setItem('currentSelectedChatId', chat.id.toString());
-                  // Na urządzeniach mobilnych ukryj listę czatów
-                  if (isMobileView) {
-                    setShowChatList(false);
-                  }
-                  // Ukryj licznik nieprzeczytanych wiadomości
-                  if (chat.unreadCount > 0) {
-                    // setHiddenUnreadCounts(prev => new Set([...prev, chat.id])); // Removed
-                  }
-                  // Oznacz czat jako przeczytany
-                  if (chat.unreadCount > 0) {
-                    authorizedFetch(`${environment.apiUrl}/api/chats/${chat.id}/mark-read`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      }
-                    }).catch(error => {
-                      console.error('Błąd podczas oznaczania czatu jako przeczytanego:', error);
-                    });
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {chat.avatarUrl ? (
-                      <Image 
-                        src={getImageUrl(chat.avatarUrl)} 
-                        alt={chat.otherParticipantName}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        width={32}
-                        height={32}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLDivElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    <div style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      background: '#4b5563', 
-                      color: 'white', 
-                      borderRadius: '50%', 
-                      display: chat.avatarUrl ? 'none' : 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      fontWeight: 700, 
-                      fontSize: 16 
-                    }}>
-                      {chat.otherParticipantName?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{chat.otherParticipantName}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                        {new Date(chat.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 13, color: '#d1d5db', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{chat.lastMessagePreview}</div>
-                  </div>
-                  {(() => {
-                    return chat.unreadCount > 0 && (
-                      <div style={{ background: '#fde047', color: '#23272f', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700, marginLeft: 4, minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {chat.unreadCount}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      {/* Prawy panel: okno rozmowy */}
-      <div style={{ 
-        flex: 1, 
-        background: 'white', 
-        flexDirection: 'column', 
-        height: '100%',
-        display: isMobileView && showChatList ? 'none' : 'flex'
-      }}>
-        {(selectedChatId || isComposingToUser) ? (
-          <>
-            {/* Pasek górny */}
-            <div style={{ padding: 16, borderBottom: '1px solid #e5e7eb', background: '#f7fafc', display: 'flex', alignItems: 'center', gap: 12 }}>
-              {isMobileView && (
-                <button
-                  onClick={() => {
-                    setShowChatList(true);
-                    setSelectedChatId(null);
-                    // Wyczyść localStorage gdy nie ma wybranego czatu
-                    localStorage.removeItem('currentSelectedChatId');
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#4f46e5',
-                    fontSize: 18,
-                    cursor: 'pointer',
-                    padding: 4,
-                    borderRadius: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minWidth: 32,
-                    height: 32
-                  }}
-                >
-                  ←
-                </button>
-              )}
-              {selectedChatId ? (
-                <>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {(() => {
-                      const selectedChat = chats.find(c => c.id === selectedChatId);
-                      if (selectedChat?.avatarUrl) {
-                        return (
-                          <Image 
-                            src={getImageUrl(selectedChat.avatarUrl)} 
-                            alt={selectedChat.otherParticipantName}
-                            width={40}
-                            height={40}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const fallback = target.nextElementSibling as HTMLDivElement;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                        );
-                      }
-                      return null;
-                    })()}
-                    <div style={{ 
-                      width: '100%', 
-                      height: '100%', 
-                      background: '#4b5563', 
-                      color: 'white', 
-                      borderRadius: '50%', 
-                      display: (() => {
-                        const selectedChat = chats.find(c => c.id === selectedChatId);
-                        return selectedChat?.avatarUrl ? 'none' : 'flex';
-                      })(), 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      fontWeight: 700, 
-                      fontSize: 16 
-                    }}>
-                      {(() => {
-                        const selectedChat = chats.find(c => c.id === selectedChatId);
-                        return selectedChat?.otherParticipantName?.split(' ').map(n => n[0]).join('').toUpperCase() || '';
-                      })()}
-                    </div>
-                  </div>
-                  <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 18, 
-                    color: '#23272f',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: isMobileView ? '150px' : 'none'
-                  }}>
-                    {chats.find(c => c.id === selectedChatId)?.otherParticipantName || "Czat"}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {otherUserData && (
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {otherUserData.avatarUrl ? (
-                        <Image 
-                          src={getImageUrl(otherUserData.avatarUrl)} 
-                          alt={otherUserData.name}
-                          width={40}
-                          height={40}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const fallback = target.nextElementSibling as HTMLDivElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
-                        />
-                      ) : null}
-                      <div style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        background: '#4b5563', 
-                        color: 'white', 
-                        borderRadius: '50%', 
-                        display: otherUserData.avatarUrl ? 'none' : 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        fontWeight: 700, 
-                        fontSize: 16 
-                      }}>
-                        {otherUserData.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ 
-                    fontWeight: 600, 
-                    fontSize: 18, 
-                    color: '#23272f',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: isMobileView ? '150px' : 'none'
-                  }}>
-                    {otherUserData ? otherUserData.name : `Nowa rozmowa z użytkownikiem ${otherId}`}
-                  </div>
-                </>
-              )}
-            </div>
-            {/* Wiadomości */}
-            <div 
-              ref={messagesContainerRef}
-              data-messages-container
-              style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#f9fafb', display: 'flex', flexDirection: 'column' }}
-            >
 
-              {selectedChatId && messages.length > 0 ? (
-                messages.map((msg, idx) => (
-                  <div
-                    key={msg.id + '-' + idx}
-                    data-msg-id={msg.id}
-                    style={{
-                      alignSelf: msg.senderId === userId ? 'flex-end' : 'flex-start',
-                      display: 'flex',
-                      flexDirection: msg.senderId === userId ? 'row-reverse' : 'row',
-                      alignItems: 'flex-end',
-                      gap: 8,
-                      marginBottom: 8,
-                      maxWidth: '70%',
-                      position: 'relative'
-                    }}
-                  >
-                    {msg.senderId !== userId && (
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {(() => {
-                          // Znajdź awatar z listy czatów na podstawie senderId
-                          const senderChat = chats.find(c => c.otherParticipantId === msg.senderId);
-                          const avatarUrl = senderChat?.avatarUrl;
-                          
-                          if (avatarUrl) {
-                            return (
-                              <Image 
-                                src={getImageUrl(avatarUrl)} 
-                                alt={msg.senderName}
-                                width={28}
-                                height={28}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const fallback = target.nextElementSibling as HTMLDivElement;
-                                  if (fallback) fallback.style.display = 'flex';
-                                }}
-                              />
-                            );
+      <ChatFrame>
+        {/* Lewy panel: lista czatów */}
+        <ChatSidebar
+          title="Wiadomości"
+          hidden={isMobileView && !showChatList}
+          actions={
+            <Button variant="secondary" size="sm" fullWidth leftIcon={<LuHeadphones size={16} />} onClick={() => router.push('/consultant-chat')}>
+              Czat z konsultantem
+            </Button>
+          }
+        >
+          {loading ? (
+            <ConversationListSkeleton />
+          ) : chats.length === 0 ? (
+            <ChatPlaceholder
+              title="Brak rozmów"
+              description="Napisz do sprzedawcy z karty oferty — rozmowa pojawi się tutaj."
+            />
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {chats.map(chat => (
+                <li key={chat.id}>
+                  <ConversationItem
+                    name={chat.otherParticipantName}
+                    avatarSrc={chat.avatarUrl ? getImageUrl(chat.avatarUrl) : null}
+                    preview={chat.lastMessagePreview}
+                    time={listTimeLabel(chat.lastMessageTimestamp)}
+                    unread={chat.unreadCount}
+                    selected={selectedChatId === chat.id}
+                    onClick={() => {
+                      setSelectedChatId(chat.id);
+                      // Aktualizuj localStorage z aktualnie wybranym chatId
+                      localStorage.setItem('currentSelectedChatId', chat.id.toString());
+                      // Na urządzeniach mobilnych ukryj listę czatów
+                      if (isMobileView) {
+                        setShowChatList(false);
+                      }
+                      // Oznacz czat jako przeczytany
+                      if (chat.unreadCount > 0) {
+                        authorizedFetch(`${environment.apiUrl}/api/chats/${chat.id}/mark-read`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
                           }
-                          return null;
-                        })()}
-                        <div style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          background: '#4b5563', 
-                          color: 'white', 
-                          borderRadius: '50%', 
-                          display: (() => {
-                            const senderChat = chats.find(c => c.otherParticipantId === msg.senderId);
-                            return senderChat?.avatarUrl ? 'none' : 'flex';
-                          })(), 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          fontWeight: 700, 
-                          fontSize: 12 
-                        }}>
-                          {msg.senderName?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                        </div>
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        background: msg.senderId === userId ? '#fbbf24' : '#e5e7eb',
-                        color: msg.senderId === userId ? '#23272f' : '#23272f',
-                        borderRadius: 16,
-                        padding: '8px 16px',
-                        wordBreak: 'break-word',
-                        fontSize: 15,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        maxWidth: '100%'
-                      }}
-                      onClick={() => setShowTimestampId(showTimestampId === msg.id ? null : msg.id)}
-                      onMouseEnter={() => {
-                        setHoveredMsgId(msg.id);
-                        hoverTimeout.current = setTimeout(() => setShowTooltip(true), 1000);
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredMsgId(null);
-                        setShowTooltip(false);
-                        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-                      }}
-                    >
-                      <div style={{ fontWeight: 500 }}>{msg.content}</div>
-                      {/* Data pod wiadomością po kliknięciu */}
-                      {showTimestampId === msg.id && (
-                        <div style={{
-                          marginTop: 6,
-                          textAlign: 'center',
-                          color: '#6b7280',
-                          fontSize: 13,
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 8
-                        }}>
-                          <span>{formatDateTime(msg.timestamp)}</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReportMessage(msg);
-                            }}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#ef4444',
-                              fontSize: 12,
-                              cursor: 'pointer',
-                              textDecoration: 'underline',
-                              padding: 2
-                            }}
-                          >
-                            zgłoś
-                          </button>
-                        </div>
-                      )}
-                      {/* Tooltip z datą */}
-                      {hoveredMsgId === msg.id && showTooltip && (
-                        <div style={{
-                          position: 'absolute',
-                          top: (() => {
-                            // Sprawdź czy wiadomość jest na górze ekranu
-                            const rect = document.querySelector('[data-messages-container]')?.getBoundingClientRect();
-                            const msgRect = document.querySelector(`[data-msg-id="${msg.id}"]`)?.getBoundingClientRect();
-                            if (rect && msgRect) {
-                              // Jeśli wiadomość jest blisko góry, pokaż tooltip pod nią
-                              if (msgRect.top - rect.top < 50) {
-                                return '100%';
-                              }
-                            }
-                            return '-32px';
-                          })(),
-                          left: (() => {
-                            // Sprawdź czy tooltip zmieści się na ekranie
-                            const rect = document.querySelector('[data-messages-container]')?.getBoundingClientRect();
-                            const msgRect = document.querySelector(`[data-msg-id="${msg.id}"]`)?.getBoundingClientRect();
-                            if (rect && msgRect) {
-                              const tooltipWidth = 200; // Przybliżona szerokość tooltipa
-                              const msgCenter = msgRect.left + msgRect.width / 2;
-                              const containerRight = rect.right;
-                              
-                              // Jeśli tooltip nie zmieści się po prawej stronie, wyrównaj do prawej krawędzi
-                              if (msgCenter + tooltipWidth / 2 > containerRight - 10) {
-                                return 'auto';
-                              }
-                              // Jeśli tooltip nie zmieści się po lewej stronie, wyrównaj do lewej krawędzi
-                              if (msgCenter - tooltipWidth / 2 < rect.left + 10) {
-                                return '0px';
-                              }
-                            }
-                            return '50%';
-                          })(),
-                          right: (() => {
-                            const rect = document.querySelector('[data-messages-container]')?.getBoundingClientRect();
-                            const msgRect = document.querySelector(`[data-msg-id="${msg.id}"]`)?.getBoundingClientRect();
-                            if (rect && msgRect) {
-                              const tooltipWidth = 200;
-                              const msgCenter = msgRect.left + msgRect.width / 2;
-                              const containerRight = rect.right;
-                              
-                              // Jeśli tooltip nie zmieści się po prawej stronie
-                              if (msgCenter + tooltipWidth / 2 > containerRight - 10) {
-                                return '10px';
-                              }
-                            }
-                            return 'auto';
-                          })(),
-                          transform: (() => {
-                            const rect = document.querySelector('[data-messages-container]')?.getBoundingClientRect();
-                            const msgRect = document.querySelector(`[data-msg-id="${msg.id}"]`)?.getBoundingClientRect();
-                            if (rect && msgRect) {
-                              const tooltipWidth = 200;
-                              const msgCenter = msgRect.left + msgRect.width / 2;
-                              const containerRight = rect.right;
-                              const containerLeft = rect.left;
-                              
-                              // Jeśli tooltip nie zmieści się po prawej lub lewej stronie, nie używaj transform
-                              if (msgCenter + tooltipWidth / 2 > containerRight - 10 || msgCenter - tooltipWidth / 2 < containerLeft + 10) {
-                                return 'none';
-                              }
-                            }
-                            return 'translateX(-50%)';
-                          })(),
-                          background: '#23272f',
-                          color: 'white',
-                          padding: '4px 12px',
-                          borderRadius: 8,
-                          fontSize: 13,
-                          whiteSpace: 'nowrap',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                          zIndex: 10,
-                          maxWidth: '200px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}>
-                          {formatDateTime(msg.timestamp)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div style={{ color: '#6b7280', textAlign: 'center', marginTop: 32 }}>
-                  {selectedChatId ? 'Brak wiadomości' : 'Napisz pierwszą wiadomość, aby rozpocząć rozmowę'}
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-            {/* Pole do wpisywania wiadomości */}
-            <form
-              onSubmit={e => { e.preventDefault(); sendMessage(); }}
-              style={{ display: 'flex', padding: 16, borderTop: '1px solid #e5e7eb', background: '#f7fafc' }}
-            >
-              <input
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                placeholder="Napisz wiadomość..."
-                style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid #d1d5db', fontSize: 15, outline: 'none', marginRight: 8 }}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                        }).catch(error => {
+                          console.error('Błąd podczas oznaczania czatu jako przeczytanego:', error);
+                        });
+                      }
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </ChatSidebar>
+
+        {/* Prawy panel: okno rozmowy */}
+        <ChatPane hidden={isMobileView && showChatList}>
+          {(selectedChatId || isComposingToUser) ? (
+            <>
+              <ChatHeader
+                title={
+                  selectedChatId
+                    ? selectedChat?.otherParticipantName || 'Czat'
+                    : otherUserData ? otherUserData.name : `Nowa rozmowa z użytkownikiem ${otherId}`
+                }
+                avatarSrc={
+                  selectedChatId
+                    ? (selectedChat?.avatarUrl ? getImageUrl(selectedChat.avatarUrl) : null)
+                    : (otherUserData?.avatarUrl ? getImageUrl(otherUserData.avatarUrl) : null)
+                }
+                subtitle={!selectedChatId ? 'Nowa rozmowa' : undefined}
+                onBack={isMobileView ? backToList : undefined}
               />
-              <button
-                type="submit"
-                style={{ background: '#fbbf24', color: '#23272f', border: 'none', borderRadius: 8, padding: '0 20px', fontWeight: 600, fontSize: 15, cursor: 'pointer', transition: 'background 0.2s' }}
-                disabled={!input.trim()}
-              >
-                Wyślij
-              </button>
-            </form>
-          </>
-        ) : (
-          <div style={{ color: '#6b7280', fontSize: 18, margin: 'auto' }}>Wybierz czat z lewej strony, aby rozpocząć rozmowę</div>
-        )}
-      </div>
+
+              <MessageScroller ref={messagesContainerRef}>
+                {selectedChatId && messages.length > 0 ? (
+                  messages.map((msg, idx) => {
+                    const mine = msg.senderId === userId;
+                    const previous = messages[idx - 1];
+                    const newDay = startsNewDay(msg.timestamp, previous?.timestamp);
+                    // Awatar tylko przy pierwszej wiadomości z serii rozmówcy
+                    const firstInSeries = newDay || previous?.senderId !== msg.senderId;
+                    return (
+                      <Fragment key={msg.id + '-' + idx}>
+                        {newDay && <DaySeparator label={dayLabel(msg.timestamp)} />}
+                        <MessageBubble
+                          data-msg-id={msg.id}
+                          mine={mine}
+                          content={msg.content}
+                          time={timeLabel(msg.timestamp)}
+                          avatar={!mine && firstInSeries ? <Avatar name={msg.senderName} src={avatarFor(msg.senderId)} size="sm" /> : undefined}
+                          onClick={() => setShowTimestampId(showTimestampId === msg.id ? null : msg.id)}
+                          footer={
+                            showTimestampId === msg.id ? (
+                              <span className="flex items-center gap-2">
+                                {formatDateTime(msg.timestamp)}
+                                {/* Zgłosić można wiadomość rozmówcy — własnej nie ma sensu */}
+                                {!mine && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReportMessage(msg);
+                                    }}
+                                    className="inline-flex items-center gap-1 font-medium text-danger hover:underline"
+                                  >
+                                    <LuFlag size={12} aria-hidden /> Zgłoś
+                                  </button>
+                                )}
+                              </span>
+                            ) : undefined
+                          }
+                        />
+                      </Fragment>
+                    );
+                  })
+                ) : (
+                  <ChatPlaceholder
+                    title={selectedChatId ? 'Brak wiadomości' : 'Nowa rozmowa'}
+                    description={selectedChatId ? 'Napisz coś, żeby zacząć.' : 'Napisz pierwszą wiadomość, aby rozpocząć rozmowę.'}
+                  />
+                )}
+                <div ref={messagesEndRef} />
+              </MessageScroller>
+
+              <Composer value={input} onChange={setInput} onSend={sendMessage} />
+            </>
+          ) : (
+            <ChatPlaceholder
+              title="Wybierz rozmowę"
+              description={chats.length > 0 ? 'Kliknij rozmowę na liście, żeby ją otworzyć.' : 'Gdy napiszesz do sprzedawcy, rozmowa pojawi się na liście.'}
+            />
+          )}
+        </ChatPane>
+      </ChatFrame>
 
       {/* Modal do zgłaszania wiadomości */}
-      {showReportModal && reportingMessage && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: 12,
-            padding: 24,
-            maxWidth: 500,
-            width: '90%',
-            maxHeight: '80vh',
-            overflow: 'auto'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 20
-            }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Zgłoś wiadomość</h3>
-              <button
-                onClick={() => setShowReportModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: 24,
-                  cursor: 'pointer',
-                  color: '#6b7280'
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Zgłaszana wiadomość */}
-            <div style={{
-              background: '#f3f4f6',
-              padding: 16,
-              borderRadius: 8,
-              marginBottom: 20
-            }}>
-              <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>
-                Zgłaszana wiadomość:
-              </div>
-              <div style={{ fontSize: 15, color: '#23272f' }}>
-                {reportingMessage?.content}
-              </div>
-            </div>
-
-            {/* Formularz */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{
-                display: 'block',
-                marginBottom: 8,
-                fontSize: 14,
-                fontWeight: 500,
-                color: '#23272f'
-              }}>
-                Wyjaśnienie:
-              </label>
-              <textarea
-                value={reportExplanation}
-                onChange={(e) => setReportExplanation(e.target.value)}
-                placeholder="Opisz powód zgłoszenia..."
-                style={{
-                  width: '100%',
-                  minHeight: 100,
-                  padding: 12,
-                  borderRadius: 8,
-                  border: '1px solid #d1d5db',
-                  fontSize: 14,
-                  resize: 'vertical',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            {/* Przyciski */}
-            <div style={{
-              display: 'flex',
-              gap: 12,
-              justifyContent: 'flex-end'
-            }}>
-              <button
-                onClick={() => setShowReportModal(false)}
-                style={{
-                  background: '#f3f4f6',
-                  color: '#23272f',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={!reportExplanation.trim() || isSubmittingReport}
-                style={{
-                  background: reportExplanation.trim() && !isSubmittingReport ? '#ef4444' : '#f3f4f6',
-                  color: reportExplanation.trim() && !isSubmittingReport ? 'white' : '#9ca3af',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: reportExplanation.trim() && !isSubmittingReport ? 'pointer' : 'not-allowed'
-                }}
-              >
-                {isSubmittingReport ? 'Wysyłanie...' : 'Zgłoś'}
-              </button>
-            </div>
-          </div>
+      <Dialog
+        open={showReportModal && !!reportingMessage}
+        onClose={() => setShowReportModal(false)}
+        title="Zgłoś wiadomość"
+        description="Zgłoszenie trafi do moderatorów."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowReportModal(false)}>
+              Anuluj
+            </Button>
+            <Button variant="danger" onClick={submitReport} disabled={!reportExplanation.trim()} loading={isSubmittingReport}>
+              Zgłoś
+            </Button>
+          </>
+        }
+      >
+        <div className="mb-4 rounded-ui-md border border-line bg-surface-muted p-3">
+          <p className="mb-1 text-xs text-ink-muted">Zgłaszana wiadomość</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-ink">{reportingMessage?.content}</p>
         </div>
-      )}
+        <Textarea
+          label="Powód zgłoszenia"
+          value={reportExplanation}
+          onChange={(e) => setReportExplanation(e.target.value)}
+          placeholder="Opisz, co jest nie tak…"
+          rows={4}
+        />
+      </Dialog>
     </div>
   );
-} 
+}

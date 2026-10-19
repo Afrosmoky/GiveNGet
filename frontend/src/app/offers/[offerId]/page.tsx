@@ -46,7 +46,7 @@ export default function OfferDetailsPage() {
       // Utwórz nowe obietnicę dla tego offerId
       const fetchPromise = (async () => {
         const res = await authorizedFetch(`${environment.apiUrl}/api/offer/details/${offerId}`);
-        if (!res.ok) throw new Error("Błąd pobierania ogłoszenia");
+        if (!res.ok) throw new Error("Błąd pobierania oferty");
         const data = await res.json();
         return data;
       })();
@@ -76,9 +76,9 @@ export default function OfferDetailsPage() {
         // Usuń obietnicę w przypadku błędu
         fetchingOffers.delete(offerId);
         if (e instanceof Error) {
-          setError(e.message || "Błąd ładowania ogłoszenia");
+          setError(e.message || "Błąd ładowania oferty");
         } else {
-          setError("Błąd ładowania ogłoszenia");
+          setError("Błąd ładowania oferty");
         }
       } finally {
         setLoading(false);

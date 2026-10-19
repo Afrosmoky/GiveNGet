@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 // import { format } from 'date-fns';
-import { FaLocationCrosshairs, FaCalendarDays } from "react-icons/fa6";
+import { LuArrowLeft, LuCalendar, LuCamera, LuCrosshair, LuImagePlus, LuInfo, LuX } from "react-icons/lu";
 
 import LocationMapModal from "./LocationMapModal";
 import Image from "next/image";
@@ -12,6 +12,8 @@ import { authorizedFetch, getUserData } from "../utils/auth";
 import { getImageUrl } from "../utils/imageUtils";
 import { TimePicker } from "./TimePicker";
 import OfferDetailsView from "./OfferDetailsView";
+import { categoryIcon } from "./offer/categoryIcons";
+import { Button, Card, CardHeader, Chip, IconButton, Input, PageHeader, Select, Spinner, Textarea, cn, consolePage } from "./ui";
 import { TransactionType, Category, isTransactionAllowed, getAllowedTransactionTypes, getTransactionTypeMessage, getProductRestrictions } from "../types/offer";
 
 interface OfferFormData {
@@ -28,6 +30,8 @@ interface OfferFormData {
   price?: string;
   /** Waluta ceny (ISO 4217); wysyłana tylko dla ofert sprzedażowych. */
   currency?: string;
+  /** Cena przed obniżką jako string — opcjonalna, tylko dla sprzedaży (docs/08 #7). */
+  originalPrice?: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
   expiryDate: Date | null;
@@ -65,23 +69,15 @@ export function OfferForm({
   setSubmitMessage: externalSetSubmitMessage,
 }: OfferFormProps) {
   const isMapUpdate = useRef(false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Sprawdź czy jesteśmy na urządzeniu mobilnym
-  useEffect(() => {
-    const updateIsMobile = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 640);
-    updateIsMobile();
-    window.addEventListener('resize', updateIsMobile);
-    return () => window.removeEventListener('resize', updateIsMobile);
-  }, []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [userData, setUserData] = useState<{ id: number; userType: string; [key: string]: unknown } | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<number | null>(
     null
   );
+  // Edycja z wczytaną kategorią startuje od razu w szczegółach; „Zmień kategorię” wraca do kroku 1
   const [currentStep, setCurrentStep] = useState<"categories" | "details">(
-    "categories"
+    isEditing && initialData?.categoryId ? "details" : "categories"
   );
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +104,7 @@ export function OfferForm({
     images: "",
     imageSize: "", // Błąd dla rozmiaru zdjęć
     price: "",
+    originalPrice: "",
   });
 
   const [touched, setTouched] = useState({
@@ -134,6 +131,7 @@ export function OfferForm({
     offerType: "free",
     price: "",
     currency: "PLN",
+    originalPrice: "",
     pickupTimeFrom: "00:00",
     pickupTimeTo: "23:55",
     expiryDate: new Date(),
@@ -482,6 +480,7 @@ export function OfferForm({
       // PRICE_NOT_ALLOWED_FOR_FREE.
       if (newData.offerType !== 'sale') {
         newData.price = "";
+        newData.originalPrice = "";
       }
 
       return newData;
@@ -489,7 +488,7 @@ export function OfferForm({
 
     // Zmiana typu unieważnia błąd ceny
     if (field === 'offerType' || field === 'categoryId' || field === 'subcategoryId') {
-      setErrors((prev) => ({ ...prev, price: "" }));
+      setErrors((prev) => ({ ...prev, price: "", originalPrice: "" }));
     }
 
     // Walidacja w czasie rzeczywistym dla pól tekstowych
@@ -544,6 +543,29 @@ export function OfferForm({
     return "";
   };
 
+  /**
+   * Cena przed obniżką — opcjonalna. Te same reguły co w backendzie
+   * (OfferService: INVALID_ORIGINAL_PRICE / ORIGINAL_PRICE_NOT_HIGHER); backend i tak je egzekwuje.
+   */
+  const validateOriginalPrice = (): string => {
+    if (formData.offerType !== 'sale') {
+      return "";
+    }
+    const raw = (formData.originalPrice || "").trim().replace(",", ".");
+    if (!raw) {
+      return "";
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0 || !/^\d+([.]\d{1,2})?$/.test(raw)) {
+      return "Podaj kwotę, np. 7.99 (maksymalnie 2 miejsca po przecinku)";
+    }
+    const price = Number((formData.price || "").trim().replace(",", "."));
+    if (Number.isFinite(price) && price > 0 && value <= price) {
+      return "Cena przed obniżką musi być wyższa od ceny";
+    }
+    return "";
+  };
+
   const handleSubmit = async (isPreview: boolean = false) => {
     setSubmitMessage(null);
 
@@ -555,6 +577,7 @@ export function OfferForm({
       images: validateImages(),
       imageSize: errors.imageSize, // Zachowaj błąd rozmiaru jeśli istnieje
       price: validatePrice(),
+      originalPrice: validateOriginalPrice(),
     };
 
     // Oznacz wszystkie pola jako touched
@@ -608,7 +631,7 @@ export function OfferForm({
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "name":
-        if (value.trim() === "") return "Nazwa ogłoszenia jest wymagana";
+        if (value.trim() === "") return "Nazwa oferty jest wymagana";
         if (value.trim().length < 3)
           return "Nazwa musi mieć co najmniej 3 znaki";
         if (value.trim().length > 100)
@@ -639,18 +662,6 @@ export function OfferForm({
     return "";
   };
 
-  const handleLocationIconMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const icon = e.currentTarget;
-    icon.classList.add("location-icon-hover");
-  };
-
-  const handleLocationIconMouseLeave = (
-    e: React.MouseEvent<HTMLDivElement>
-  ) => {
-    const icon = e.currentTarget;
-    icon.classList.remove("location-icon-hover");
-  };
-
   const handleBackFromPreview = () => {
     setShowPreview(false);
   };
@@ -668,6 +679,10 @@ export function OfferForm({
         ? Number(formData.price.replace(",", "."))
         : undefined,
       currency: formData.offerType === 'sale' ? formData.currency : undefined,
+      originalPrice: formData.offerType === 'sale' && formData.originalPrice
+        ? Number(formData.originalPrice.replace(",", "."))
+        : undefined,
+      categoryId: formData.categoryId || undefined,
       expiryDate: formData.expiryDate ? formData.expiryDate.toISOString().split('T')[0] : undefined,
       pickupDateFrom: formData.pickupTimeFrom,
       pickupDateTo: formData.pickupTimeTo,
@@ -686,708 +701,398 @@ export function OfferForm({
 
   if (categoriesLoading) {
     return (
-      <div
-        style={{
-          minHeight: "calc(100vh - 160px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#f7fafc",
-          padding: "20px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "white",
-            borderRadius: "16px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            padding: "40px",
-            textAlign: "center",
-            maxWidth: "500px",
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #e2e8f0",
-              borderTop: "4px solid #fbbf24",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-              margin: "0 auto 20px",
-            }}
-          />
-          <h2
-            style={{
-              fontSize: "24px",
-              color: "#2d3748",
-              marginBottom: "8px",
-            }}
-          >
-            Ładowanie kategorii...
-          </h2>
-          <p
-            style={{
-              color: "#4a5568",
-              fontSize: "16px",
-            }}
-          >
-            Pobieramy dostępne kategorie
-          </p>
-        </div>
-
-        <style jsx>{`
-          @keyframes spin {
-            0% {
-              transform: rotate(0deg);
-            }
-            100% {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
+      <div className="flex min-h-[50vh] items-center justify-center px-4 py-10">
+        <Card padding="lg" className="flex w-full max-w-md flex-col items-center gap-3 text-center">
+          <Spinner className="h-8 w-8 text-brand" />
+          <h2 className="text-lg font-semibold text-ink">Ładowanie kategorii...</h2>
+          <p className="text-sm text-ink-muted">Pobieramy dostępne kategorie</p>
+        </Card>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          minHeight: "calc(100vh - 160px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#f7fafc",
-          padding: "20px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "white",
-            borderRadius: "16px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-            padding: "40px",
-            textAlign: "center",
-            maxWidth: "500px",
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: "64px",
-              height: "64px",
-              backgroundColor: "#f87171",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
-            }}
-          >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <h2
-            style={{
-              fontSize: "24px",
-              color: "#dc2626",
-              marginBottom: "16px",
-            }}
-          >
-            Błąd ładowania
-          </h2>
-          <p
-            style={{
-              color: "#4a5568",
-              fontSize: "16px",
-              marginBottom: "30px",
-              lineHeight: "1.5",
-            }}
-          >
-            {error}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: "12px 24px",
-              backgroundColor: "#fbbf24",
-              color: "#1a202c",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: "16px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              transition: "background-color 0.3s",
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "#f59e0b")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "#fbbf24")
-            }
-          >
-            Spróbuj ponownie
-          </button>
-        </div>
+      <div className="flex min-h-[50vh] items-center justify-center px-4 py-10">
+        <Card padding="lg" className="flex w-full max-w-md flex-col items-center gap-3 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger">
+            <LuInfo size={24} aria-hidden />
+          </span>
+          <h2 className="text-lg font-semibold text-ink">Błąd ładowania</h2>
+          <p className="text-sm text-ink-muted">{error}</p>
+          <Button onClick={() => window.location.reload()}>Spróbuj ponownie</Button>
+        </Card>
       </div>
     );
   }
+
+  const title = isEditing ? `Edytuj ofertę — ${formData.name || "Ładowanie..."}` : "Dodaj ofertę";
 
   // Krok 1: Wybór kategorii
   if (currentStep === "categories") {
+    const needsSubcategory = Boolean(selectedCategoryData?.subcategories?.length);
     return (
-      <div className="min-h-[calc(100vh-160px)] bg-gray-50 p-2 sm:p-5">
-        <div className="max-w-4xl mx-auto w-full">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl text-gray-800 mb-6 sm:mb-10 text-center">
-            {isEditing
-              ? `Edytuj ogłoszenie - ${formData.name || "Ładowanie..."}`
-              : "Dodaj ogłoszenie"}
-          </h1>
+      <div className={cn(consolePage, '[&>*]:max-w-4xl')}>
+        <PageHeader title={title} description="Krok 1 z 2 — wybierz kategorię produktu." />
 
-          <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 md:p-10">
-            {/* Wybór kategorii */}
-            <div className="mb-6 sm:mb-10">
-              <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 mb-4 sm:mb-6 text-center">
-                Wybierz kategorię
-              </h2>
-
-              <select
-                value={selectedCategory || ""}
-                onChange={(e) => handleCategoryChange(Number(e.target.value))}
-                className="w-full p-3 sm:p-4 text-base sm:text-lg border-2 border-gray-200 rounded-xl bg-white text-gray-800 cursor-pointer transition-colors focus:border-yellow-400"
-              >
-                <option value="">-- Wybierz kategorię --</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Wybór podkategorii - tylko jeśli kategoria ma podkategorie */}
-            {selectedCategory && selectedCategoryData && selectedCategoryData.subcategories && selectedCategoryData.subcategories.length > 0 && (
-              <div className="mb-6 sm:mb-10">
-                <h2 className="text-xl sm:text-2xl md:text-3xl text-gray-800 mb-4 sm:mb-6 text-center">
-                  Wybierz podkategorię
-                </h2>
-
-                <select
-                  value={selectedSubcategory || ""}
-                  onChange={(e) =>
-                    handleSubcategoryChange(Number(e.target.value))
-                  }
-                  className="w-full p-3 sm:p-4 text-base sm:text-lg border-2 border-gray-200 rounded-xl bg-white text-gray-800 cursor-pointer transition-colors focus:border-yellow-400"
-                >
-                  <option value="">-- Wybierz podkategorię --</option>
-                  {selectedCategoryData.subcategories.map((subcategory) => (
-                    <option key={subcategory.id} value={subcategory.id}>
-                      {subcategory.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Przycisk Dalej */}
-            {selectedCategory && (
-              <div className="text-center">
+        <Card padding="lg">
+          <CardHeader title="Kategoria" description="Od kategorii zależą dostępne typy oferty." />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {categories.map((category) => {
+              const Icon = categoryIcon(category.id);
+              const selected = selectedCategory === category.id;
+              return (
                 <button
-                  onClick={handleNext}
-                  className="px-6 sm:px-8 py-3 sm:py-4 bg-yellow-400 text-gray-900 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out shadow-md hover:bg-yellow-500 hover:-translate-y-0.5 hover:shadow-lg"
+                  key={category.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => handleCategoryChange(category.id)}
+                  className={cn(
+                    "flex min-h-[56px] items-center gap-2.5 rounded-ui-md border px-3 py-2.5 text-left text-sm font-medium transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+                    selected
+                      ? "border-brand/50 bg-brand-soft text-brand-strong"
+                      : "border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-muted"
+                  )}
                 >
-                  Dalej
+                  <Icon size={20} aria-hidden className={cn("shrink-0", selected ? "text-brand" : "text-ink-subtle")} />
+                  <span className="leading-tight">{category.name}</span>
                 </button>
-              </div>
-            )}
+              );
+            })}
           </div>
-        </div>
+
+          {/* Wybór podkategorii - tylko jeśli kategoria ma podkategorie */}
+          {selectedCategory && needsSubcategory && selectedCategoryData && (
+            <div className="mt-6 border-t border-line pt-5">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                Podkategoria
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {selectedCategoryData.subcategories.map((subcategory) => (
+                  <Chip
+                    key={subcategory.id}
+                    selected={selectedSubcategory === subcategory.id}
+                    onClick={() => handleSubcategoryChange(subcategory.id)}
+                  >
+                    {subcategory.name}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 flex justify-end border-t border-line pt-4">
+            <Button
+              size="lg"
+              onClick={handleNext}
+              disabled={!selectedCategory || (needsSubcategory && !selectedSubcategory)}
+              className="w-full sm:w-auto sm:min-w-[160px]"
+            >
+              Dalej
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
 
-  // Krok 2: Szczegóły ogłoszenia
+  const currentCategory = categories.find(c => c.id === formData.categoryId) || categories[0];
+  const currentSubcategory = categories.find(c => c.id === formData.categoryId)?.subcategories.find(s => s.id === formData.subcategoryId) || null;
+  const allowedTypes = getAllowedTransactionTypes(currentCategory, currentSubcategory);
+  const transactionTypeMessage = getTransactionTypeMessage(currentCategory, currentSubcategory, userData?.userType);
+  const productRestrictions = getProductRestrictions(currentCategory);
+
+  // Krok 2: Szczegóły oferty
   return (
-    <div className="min-h-[calc(100vh-160px)] bg-gray-50 p-2 sm:p-5">
-      <div className="max-w-5xl mx-auto w-full">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl text-gray-800 mb-6 sm:mb-10 text-center">
-          {isEditing
-            ? `Edytuj ogłoszenie - ${formData.name || "Ładowanie..."}`
-            : "Szczegóły ogłoszenia"}
-        </h1>
+    <div className={cn(consolePage, '[&>*]:max-w-4xl')}>
+      <PageHeader
+        title={title}
+        description="Krok 2 z 2 — opisz ofertę i ustal warunki odbioru."
+        actions={
+          <Button variant="ghost" size="sm" leftIcon={<LuArrowLeft size={16} />} onClick={handleBack}>
+            Zmień kategorię
+          </Button>
+        }
+      />
 
-        {/* Informacja o pozostałych ofertach */}
-        {!isEditing && userData && typeof userData.freeOffersCount === 'number' && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-blue-800 font-medium">
-                  Pozostało Ci {userData.freeOffersCount || 0} darmowych ofert w tym miesiącu
-                </p>
-                {userData.freeOffersCount === 0 && (
-                  <p className="text-blue-600 text-sm mt-1">
-                    Nie możesz utworzyć więcej darmowych ofert. Spróbuj ponownie w następnym miesiącu.
-                  </p>
-                )}
-              </div>
-            </div>
+      {/* Informacja o pozostałych ofertach */}
+      {!isEditing && userData && typeof userData.freeOffersCount === 'number' && (
+        <div className="mb-4 flex items-start gap-3 rounded-ui-md border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-900">
+          <LuInfo size={18} aria-hidden className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Pozostało Ci {userData.freeOffersCount || 0} darmowych ofert w tym miesiącu</p>
+            {userData.freeOffersCount === 0 && (
+              <p className="mt-0.5">Nie możesz utworzyć więcej darmowych ofert. Spróbuj ponownie w następnym miesiącu.</p>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="bg-white rounded-2xl shadow-md p-4 sm:p-6 md:p-10">
-          {/* Przycisk powrotu */}
-          <div className="mb-6 sm:mb-8">
-            <button
-              onClick={handleBack}
-              className="px-4 sm:px-6 py-2 sm:py-3 bg-gray-200 text-gray-600 border-none rounded-lg text-sm sm:text-base cursor-pointer transition-colors hover:bg-gray-300"
-            >
-              ← Powrót do kategorii
-            </button>
-          </div>
+      <div className="flex flex-col gap-4">
+        {/* Zdjęcia */}
+        <Card padding="lg">
+          <CardHeader title="Zdjęcia" description="Maksymalnie 5 zdjęć, każde do 5 MB." />
 
-          {/* Drag & Drop dla zdjęć */}
-          <div className="mb-6 sm:mb-8">
-            <h3 className="text-lg sm:text-xl text-gray-800 mb-4 sm:mb-6">
-              Zdjęcia (maksymalnie 5, max 5MB każde)
-            </h3>
-
-            {/* Istniejące zdjęcia (dla edycji) */}
-            {isEditing &&
-              formData.existingImages &&
-              formData.existingImages.length > 0 && (
-                <div className="mb-4 sm:mb-6">
-                  <h4 className="text-base sm:text-lg text-gray-700 mb-3 sm:mb-4">
-                    Istniejące zdjęcia:
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-                    {formData.existingImages.map((imageUrl, index) => (
-                      <div
-                        key={index}
-                        className="relative border border-gray-200 rounded-lg overflow-hidden"
-                      >
-                        <Image
-                          src={getImageUrl(imageUrl)}
-                          alt={`Istniejące zdjęcie ${index + 1}`}
-                          width={500}
-                          height={120}
-                          className="w-full h-24 sm:h-32 object-cover"
-                        />
-                        <button
-                          onClick={() => removeExistingImage(index)}
-                          className="absolute top-1 right-1 bg-red-500 text-white border-none rounded-full w-6 h-6 text-xs cursor-pointer flex items-center justify-center"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+          {(() => {
+            const existing = isEditing ? formData.existingImages || [] : [];
+            const thumbClass = "relative aspect-square overflow-hidden rounded-ui-md border border-line bg-surface-sunken";
+            const removeClass = "h-7 w-7 bg-surface/90 shadow-card hover:bg-danger hover:text-white";
+            return (existing.length > 0 || formData.images.length > 0) ? (
+              <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+                {/* Istniejące zdjęcia (dla edycji) */}
+                {existing.map((imageUrl, index) => (
+                  <div key={`existing-${index}`} className={thumbClass}>
+                    <Image src={getImageUrl(imageUrl)} alt={`Istniejące zdjęcie ${index + 1}`} fill sizes="160px" className="object-cover" />
+                    <div className="absolute right-1 top-1"><IconButton label="Usuń zdjęcie" icon={<LuX size={14} />} onClick={() => removeExistingImage(index)} className={removeClass} /></div>
                   </div>
-                </div>
-              )}
-
-            <div
-              {...getRootProps()}
-              className="border-2 border-dashed border-gray-300 rounded-xl p-6 sm:p-10 text-center bg-white cursor-pointer transition-all duration-300 ease-in-out hover:border-yellow-400"
-              style={{ backgroundColor: isDragActive ? "#f7fafc" : "white" }}
-            >
-              <input {...getInputProps()} />
-              <div className="text-4xl sm:text-5xl text-gray-300 mb-4 sm:mb-6">
-                📷
-              </div>
-              <p className="text-base sm:text-lg text-gray-600 mb-2 sm:mb-4">
-                {isDragActive
-                  ? "Upuść pliki tutaj..."
-                  : "Przeciągnij i upuść zdjęcia lub kliknij, aby wybrać"}
-              </p>
-              <p className="text-sm sm:text-base text-gray-500">
-                Maksymalnie 5 zdjęć, każde do 5MB
-              </p>
-            </div>
-
-            {/* Podgląd wybranych zdjęć */}
-            {formData.images.length > 0 && (
-              <div className="mt-4 sm:mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                ))}
+                {/* Podgląd wybranych zdjęć */}
                 {formData.images.map((file, index) => (
-                  <div
-                    key={index}
-                    className="relative border border-gray-200 rounded-lg overflow-hidden"
-                  >
-                    <Image
-                      src={URL.createObjectURL(file)}
-                      alt={`Zdjęcie ${index + 1}`}
-                      width={500}
-                      height={120}
-                      className="w-full h-24 sm:h-32 object-cover"
-                    />
-                    <button
-                      onClick={() => removeImage(index)}
-                      className="absolute top-1 right-1 bg-red-500 text-white border-none rounded-full w-6 h-6 text-xs cursor-pointer flex items-center justify-center"
-                    >
-                      ×
-                    </button>
-                    <div className="p-2 text-xs text-gray-600 text-center">
+                  <div key={`new-${index}`} className={thumbClass}>
+                    <Image src={URL.createObjectURL(file)} alt={`Zdjęcie ${index + 1}`} fill sizes="160px" className="object-cover" />
+                    <div className="absolute right-1 top-1"><IconButton label="Usuń zdjęcie" icon={<LuX size={14} />} onClick={() => removeImage(index)} className={removeClass} /></div>
+                    <span className="absolute bottom-1 left-1 rounded-full bg-neutral-900/70 px-1.5 py-px text-[10px] font-medium text-white">
                       {(file.size / 1024 / 1024).toFixed(2)} MB
-                    </div>
+                    </span>
                   </div>
                 ))}
               </div>
-            )}
+            ) : null;
+          })()}
 
-            {/* Błąd dla zdjęć */}
-            {errors.images && (
-              <div className="text-red-500 text-xs sm:text-sm mt-2">
-                {errors.images}
-              </div>
+          <div
+            {...getRootProps()}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-ui-lg border-2 border-dashed px-4 py-8 text-center transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40",
+              isDragActive ? "border-brand bg-brand-soft" : "border-line-strong bg-surface-muted hover:border-brand/60 hover:bg-brand-soft/50"
             )}
-            
-            {/* Błąd dla rozmiaru zdjęć */}
-            {errors.imageSize && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-800">
-                      Błąd walidacji plików
-                    </h3>
-                    <div className="mt-2 text-sm text-red-700">
-                      {errors.imageSize}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          >
+            <input {...getInputProps()} />
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-brand shadow-card">
+              {isDragActive ? <LuImagePlus size={22} aria-hidden /> : <LuCamera size={22} aria-hidden />}
+            </span>
+            <p className="text-sm font-medium text-ink">
+              {isDragActive ? "Upuść pliki tutaj..." : "Przeciągnij i upuść zdjęcia lub kliknij, aby wybrać"}
+            </p>
+            <p className="text-xs text-ink-muted">JPG, PNG, GIF lub WEBP</p>
           </div>
 
-          {/* Nazwa i Lokalizacja */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Nazwa *
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => handleInputChange("name", e.target.value)}
-                onBlur={() => handleBlur("name")}
-                placeholder="Wprowadź nazwę ogłoszenia"
-                className={`w-full p-3 sm:p-4 text-base sm:text-lg border-2 rounded-lg transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none ${
-                  errors.name ? "border-red-500" : "border-gray-200"
-                }`}
-              />
-              {errors.name && (
-                <div className="text-red-500 text-xs sm:text-sm mt-1">
-                  {errors.name}
-                </div>
-              )}
-            </div>
+          {/* Błąd dla zdjęć */}
+          {errors.images && <p className="mt-2 text-xs text-danger">{errors.images}</p>}
 
-            <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Lokalizacja *
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formData.location}
-                  onChange={(e) =>
-                    handleInputChange("location", e.target.value)
-                  }
-                  placeholder="Wprowadź lokalizację lub kliknij ikonę GPS"
-                  className="w-full p-3 sm:p-4 pr-12 sm:pr-14 text-base sm:text-lg border-2 border-gray-200 rounded-lg transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none"
-                />
-                <div
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 transition-all duration-200 hover:text-yellow-400 hover:scale-110 z-10"
-                  onClick={() => setMapModalOpen(true)}
-                  onMouseMove={handleLocationIconMouseMove}
-                  onMouseLeave={handleLocationIconMouseLeave}
-                  title="Wybierz lokalizację na mapie"
-                >
-                  <FaLocationCrosshairs size={20} />
-                </div>
-                {/* Lista sugestii */}
-                {showLocationSuggestions && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                    {locationSearching ? (
-                      <div className="p-3 text-center text-gray-500">
-                        Wyszukiwanie...
-                      </div>
-                    ) : (
-                      locationSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSuggestionSelect(suggestion)}
-                          className="w-full p-3 border-none bg-transparent text-left text-sm sm:text-base text-gray-800 cursor-pointer border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
-                        >
-                          {suggestion.formatted}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
+          {/* Błąd dla rozmiaru zdjęć */}
+          {errors.imageSize && (
+            <div role="alert" className="mt-3 rounded-ui-md border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger">
+              <p className="font-medium">Błąd walidacji plików</p>
+              <p className="mt-0.5">{errors.imageSize}</p>
             </div>
-          </div>
+          )}
+        </Card>
 
-          {/* Opis */}
-          <div className="mb-6 sm:mb-8">
-            <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-              Opis *
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => handleInputChange("description", e.target.value)}
-              onBlur={() => handleBlur("description")}
-              placeholder="Opisz szczegółowo swoje ogłoszenie..."
-              className={`w-full min-h-48 p-4 text-base sm:text-lg border-2 rounded-lg resize-vertical font-inherit leading-relaxed transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none ${
-                errors.description ? "border-red-500" : "border-gray-200"
-              }`}
+        {/* Podstawowe informacje */}
+        <Card padding="lg">
+          <CardHeader title="Opis oferty" />
+          <div className="flex flex-col gap-4">
+            <Input
+              label="Nazwa *"
+              value={formData.name}
+              onChange={(e) => handleInputChange("name", e.target.value)}
+              onBlur={() => handleBlur("name")}
+              placeholder="Np. Chleb żytni na zakwasie"
+              error={errors.name || undefined}
             />
-            {errors.description && (
-              <div className="text-red-500 text-xs sm:text-sm mt-1">
-                {errors.description}
-              </div>
-            )}
-            <div className="mt-2 text-sm sm:text-base text-gray-500">
-              Możesz używać podstawowego formatowania tekstu. Dla lepszego
-              formatowania (pogrubienie, kursywa, listy) zalecamy skopiowanie
-              tekstu z edytora tekstu.
-            </div>
-          </div>
 
-          {/* Typ oferty i termin ważności */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Typ oferty
-              </label>
-              <select
-                value={formData.offerType}
-                onChange={(e) => handleInputChange("offerType", e.target.value)}
-                className="w-full p-3 sm:p-4 text-base sm:text-lg border-2 border-gray-200 rounded-lg bg-white cursor-pointer transition-colors focus:border-yellow-400"
-              >
-                {getAllowedTransactionTypes(
-                  categories.find(c => c.id === formData.categoryId) || categories[0],
-                  categories.find(c => c.id === formData.categoryId)?.subcategories.find(s => s.id === formData.subcategoryId) || null
-                ).map(type => (
-                  <option key={type} value={type}>
-                    {type === 'free' ? 'Za darmo' : type === 'exchange' ? 'Wymiana' : 'Sprzedaż'}
-                  </option>
-                ))}
-              </select>
-              {getTransactionTypeMessage(
-                categories.find(c => c.id === formData.categoryId) || categories[0],
-                categories.find(c => c.id === formData.categoryId)?.subcategories.find(s => s.id === formData.subcategoryId) || null,
-                userData?.userType
-              ) && (
-                <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-                  {getTransactionTypeMessage(
-                    categories.find(c => c.id === formData.categoryId) || categories[0],
-                    categories.find(c => c.id === formData.categoryId)?.subcategories.find(s => s.id === formData.subcategoryId) || null,
-                    userData?.userType
+            <div className="relative">
+              <Input
+                label="Lokalizacja *"
+                value={formData.location}
+                onChange={(e) => handleInputChange("location", e.target.value)}
+                placeholder="Wprowadź lokalizację lub wybierz na mapie"
+                error={errors.location || undefined}
+                rightSlot={
+                  <IconButton
+                    label="Wybierz lokalizację na mapie"
+                    icon={<LuCrosshair size={18} />}
+                    onClick={() => setMapModalOpen(true)}
+                    className="h-8 w-8 hover:text-brand"
+                  />
+                }
+              />
+              {/* Lista sugestii */}
+              {showLocationSuggestions && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-ui-md border border-line bg-surface shadow-pop">
+                  {locationSearching ? (
+                    <div className="p-3 text-center text-sm text-ink-muted">Wyszukiwanie...</div>
+                  ) : (
+                    locationSuggestions.map((suggestion, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleSuggestionSelect(suggestion)}
+                        className="w-full border-b border-line px-3 py-2.5 text-left text-sm text-ink transition-colors last:border-b-0 hover:bg-surface-muted"
+                      >
+                        {suggestion.formatted}
+                      </button>
+                    ))
                   )}
                 </div>
               )}
-              
-              {/* Informacje o ograniczeniach produktów */}
-              {getProductRestrictions(
-                categories.find(c => c.id === formData.categoryId) || categories[0]
-              ) && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <p className="font-medium">Ograniczenia produktów</p>
-                      <p className="mt-1">
-                        {getProductRestrictions(
-                          categories.find(c => c.id === formData.categoryId) || categories[0]
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Termin ważności *
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={
-                    formData.expiryDate && !isNaN(formData.expiryDate.getTime())
-                      ? formData.expiryDate.toISOString().split("T")[0]
-                      : ""
-                  }
-                  onChange={(e) => {
-                    try {
-                      const value = e.target.value
-                        ? new Date(e.target.value)
-                        : null;
-                      handleInputChange("expiryDate", value);
-                    } catch {
-                      handleInputChange("expiryDate", null);
-                    }
-                  }}
-                  min={new Date().toISOString().split("T")[0]}
-                  className="w-full p-3 sm:p-4 pr-12 sm:pr-14 text-base sm:text-lg border-2 border-gray-200 rounded-lg transition-colors focus:border-yellow-400 focus:ring-5 focus:ring-yellow-300 focus:outline-none cursor-pointer"
-                />
-                <div
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 transition-all duration-200 hover:text-yellow-400 hover:scale-110 z-10"
-                  onClick={() => {
-                    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
-                    if (dateInput) {
-                      dateInput.showPicker();
-                    }
-                  }}
-                  title="Wybierz datę"
-                >
-                  <FaCalendarDays size={20} />
-                </div>
+            <Textarea
+              label="Opis *"
+              value={formData.description}
+              onChange={(e) => handleInputChange("description", e.target.value)}
+              onBlur={() => handleBlur("description")}
+              placeholder="Opisz produkt: skład, stan, ile sztuk w paczce…"
+              rows={6}
+              error={errors.description || undefined}
+              hint="Możesz używać podstawowego formatowania tekstu. Dla lepszego formatowania (pogrubienie, kursywa, listy) zalecamy skopiowanie tekstu z edytora tekstu."
+            />
+          </div>
+        </Card>
+
+        {/* Typ i cena */}
+        <Card padding="lg">
+          <CardHeader title="Typ oferty i cena" />
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Typ oferty">
+            {allowedTypes.map(type => (
+              <Chip
+                key={type}
+                selected={formData.offerType === type}
+                onClick={() => handleInputChange("offerType", type)}
+              >
+                {type === 'free' ? 'Za darmo' : type === 'exchange' ? 'Wymiana' : 'Sprzedaż'}
+              </Chip>
+            ))}
+          </div>
+
+          {transactionTypeMessage && (
+            <div className="mt-3 rounded-ui-md border border-warning/30 bg-warning-soft px-3 py-2.5 text-sm text-warning">
+              {transactionTypeMessage}
+            </div>
+          )}
+
+          {/* Informacje o ograniczeniach produktów */}
+          {productRestrictions && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-ui-md border border-accent-200 bg-accent-50 px-3 py-2.5 text-sm text-accent-900">
+              <LuInfo size={16} aria-hidden className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Ograniczenia produktów</p>
+                <p className="mt-0.5">{productRestrictions}</p>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Cena — tylko dla ofert sprzedażowych. Dla „za darmo" i „wymiany" backend
               odrzuca cenę (PRICE_NOT_ALLOWED_FOR_FREE), więc blok nie tylko się ukrywa,
               ale wartość jest też czyszczona w handleInputChange. */}
           {formData.offerType === 'sale' && (
-            <div className="mb-6 sm:mb-8 rounded-lg border-2 border-gray-200 p-4 sm:p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4 sm:gap-6">
-                <div>
-                  <label
-                    htmlFor="offer-price"
-                    className="block text-base sm:text-lg font-bold text-gray-800 mb-2 sm:mb-3"
-                  >
-                    Cena za sztukę *
-                  </label>
-                  <input
-                    id="offer-price"
-                    type="text"
-                    inputMode="decimal"
-                    value={formData.price || ""}
-                    onChange={(e) => handleInputChange("price", e.target.value)}
-                    onBlur={() =>
-                      setErrors((prev) => ({ ...prev, price: validatePrice() }))
-                    }
-                    placeholder="np. 4.99"
-                    aria-invalid={errors.price ? true : undefined}
-                    aria-describedby={errors.price ? "offer-price-error" : undefined}
-                    className={`w-full rounded-lg border-2 p-3 sm:p-4 text-base sm:text-lg transition-colors focus:outline-none focus:ring-4 focus:ring-yellow-200 ${
-                      errors.price
-                        ? "border-red-400 focus:border-red-500"
-                        : "border-gray-200 focus:border-yellow-400"
-                    }`}
-                  />
-                  {errors.price ? (
-                    <p id="offer-price-error" className="mt-1 text-xs sm:text-sm text-red-500">
-                      {errors.price}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs sm:text-sm text-gray-500">
-                      Cena za jedną sztukę, maksymalnie 2 miejsca po przecinku.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="offer-currency"
-                    className="block text-base sm:text-lg font-bold text-gray-800 mb-2 sm:mb-3"
-                  >
-                    Waluta
-                  </label>
-                  <select
-                    id="offer-currency"
-                    value={formData.currency || "PLN"}
-                    onChange={(e) => handleInputChange("currency", e.target.value)}
-                    className="w-full cursor-pointer rounded-lg border-2 border-gray-200 bg-white p-3 sm:p-4 text-base sm:text-lg transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200"
-                  >
-                    <option value="PLN">PLN</option>
-                    <option value="EUR">EUR</option>
-                    <option value="GBP">GBP</option>
-                  </select>
-                </div>
-              </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 border-t border-line pt-5 sm:grid-cols-[1fr_1fr_120px]">
+              <Input
+                id="offer-price"
+                label="Cena za sztukę *"
+                inputMode="decimal"
+                value={formData.price || ""}
+                onChange={(e) => handleInputChange("price", e.target.value)}
+                onBlur={() => setErrors((prev) => ({ ...prev, price: validatePrice(), originalPrice: validateOriginalPrice() }))}
+                placeholder="np. 4.99"
+                error={errors.price || undefined}
+                hint="Maksymalnie 2 miejsca po przecinku."
+              />
+              <Input
+                id="offer-original-price"
+                label="Cena przed obniżką"
+                inputMode="decimal"
+                value={formData.originalPrice || ""}
+                onChange={(e) => handleInputChange("originalPrice", e.target.value)}
+                onBlur={() => setErrors((prev) => ({ ...prev, originalPrice: validateOriginalPrice() }))}
+                placeholder="np. 7.99"
+                error={errors.originalPrice || undefined}
+                hint="Opcjonalnie — klient zobaczy przekreśloną cenę i % rabatu."
+              />
+              <Select
+                id="offer-currency"
+                label="Waluta"
+                value={formData.currency || "PLN"}
+                onChange={(e) => handleInputChange("currency", e.target.value)}
+              >
+                <option value="PLN">PLN</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </Select>
             </div>
           )}
+        </Card>
 
-          {/* Godziny odbioru */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        {/* Termin i odbiór */}
+        <Card padding="lg">
+          <CardHeader title="Termin i odbiór" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Input
+              id="offer-expiry"
+              type="date"
+              label="Termin ważności *"
+              value={
+                formData.expiryDate && !isNaN(formData.expiryDate.getTime())
+                  ? formData.expiryDate.toISOString().split("T")[0]
+                  : ""
+              }
+              onChange={(e) => {
+                try {
+                  const value = e.target.value ? new Date(e.target.value) : null;
+                  handleInputChange("expiryDate", value);
+                } catch {
+                  handleInputChange("expiryDate", null);
+                }
+              }}
+              min={new Date().toISOString().split("T")[0]}
+              className="cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden"
+              rightSlot={
+                <IconButton
+                  label="Wybierz datę"
+                  icon={<LuCalendar size={18} />}
+                  onClick={() => (document.getElementById("offer-expiry") as HTMLInputElement | null)?.showPicker()}
+                  className="h-8 w-8 hover:text-brand"
+                />
+              }
+            />
             <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Godziny odbioru - Od
-              </label>
-              <TimePicker
-                value={formData.pickupTimeFrom}
-                onChange={(time) => handleInputChange("pickupTimeFrom", time)}
-                className="w-full"
-              />
+              <span className="mb-1.5 block text-sm font-medium text-ink">Odbiór od</span>
+              <TimePicker value={formData.pickupTimeFrom} onChange={(time) => handleInputChange("pickupTimeFrom", time)} label="Odbiór od" />
             </div>
             <div>
-              <label className="block text-base sm:text-lg text-gray-800 mb-2 sm:mb-3 font-bold">
-                Godziny odbioru - Do
-              </label>
-              <TimePicker
-                value={formData.pickupTimeTo}
-                onChange={(time) => handleInputChange("pickupTimeTo", time)}
-                className="w-full"
-              />
+              <span className="mb-1.5 block text-sm font-medium text-ink">Odbiór do</span>
+              <TimePicker value={formData.pickupTimeTo} onChange={(time) => handleInputChange("pickupTimeTo", time)} label="Odbiór do" />
             </div>
           </div>
+        </Card>
 
-          {/* Komunikat o wyniku wysyłania */}
-          {submitMessage && (
-            <div
-              className={`p-3 sm:p-4 rounded-lg mb-4 sm:mb-6 text-center border ${
-                submitMessage.type === "success"
-                  ? "bg-green-50 border-green-300 text-gray-800"
-                  : "bg-red-50 border-red-300 text-red-600"
-              }`}
-            >
-              {submitMessage.text}
-            </div>
-          )}
-
-          {/* Przyciski */}
-          <div className={`flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center mt-8 sm:mt-10 ${isMobile ? 'mb-32' : ''}`}>
-            <button
-              onClick={() => handleSubmit(true)}
-              disabled={submitting}
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-gray-200 text-gray-600 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out opacity-100 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-gray-300 hover:-translate-y-0.5"
-            >
-              Podgląd
-            </button>
-
-            <button
-              onClick={() => handleSubmit(false)}
-              disabled={submitting}
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-yellow-400 text-gray-900 border-none rounded-xl text-base sm:text-lg font-bold cursor-pointer transition-all duration-300 ease-in-out shadow-md opacity-100 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-yellow-500 hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              {submitting
-                ? "Wysyłanie..."
-                : isEditing
-                ? "Zapisz zmiany"
-                : "Wystaw ogłoszenie"}
-            </button>
+        {/* Komunikat o wyniku wysyłania */}
+        {submitMessage && (
+          <div
+            role={submitMessage.type === "error" ? "alert" : "status"}
+            className={cn(
+              "rounded-ui-md border px-4 py-3 text-center text-sm",
+              submitMessage.type === "success"
+                ? "border-brand/30 bg-brand-soft text-brand-strong"
+                : "border-danger/30 bg-danger-soft text-danger"
+            )}
+          >
+            {submitMessage.text}
           </div>
+        )}
+
+        {/* Przyciski */}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="secondary" size="lg" onClick={() => handleSubmit(true)} disabled={submitting} className="sm:min-w-[140px]">
+            Podgląd
+          </Button>
+          <Button size="lg" onClick={() => handleSubmit(false)} loading={submitting} className="sm:min-w-[180px]">
+            {submitting ? "Wysyłanie..." : isEditing ? "Zapisz zmiany" : "Wystaw ofertę"}
+          </Button>
         </div>
       </div>
 
@@ -1402,7 +1107,7 @@ export function OfferForm({
 
       {/* Podgląd oferty */}
       {showPreview && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-surface-muted">
           <OfferDetailsView
             offer={getPreviewOffer()}
             isPreview={true}
@@ -1414,36 +1119,6 @@ export function OfferForm({
           />
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes spin {
-          0% {
-            transform: rotate(0deg);
-          }
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-
-        .location-icon.location-icon-hover {
-          color: #fbbf24 !important;
-          transform: translateY(-50%) scale(1.1) !important;
-        }
-
-        /* Ukryj natywną ikonę kalendarza */
-        input[type="date"]::-webkit-calendar-picker-indicator {
-          display: none;
-        }
-        
-        input[type="date"]::-webkit-inner-spin-button,
-        input[type="date"]::-webkit-outer-spin-button {
-          display: none;
-        }
-        
-        input[type="date"]::-webkit-clear-button {
-          display: none;
-        }
-      `}</style>
     </div>
   );
 }

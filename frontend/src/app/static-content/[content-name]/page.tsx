@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
-import { environment } from '../../../config';
+import { LuFileText } from 'react-icons/lu';
+import { serverApiUrl } from '../../../config/serverApi';
+import { Button, Card, cn, pageContainer } from '../../../components/ui';
 
 export async function generateStaticParams() {
   return [
@@ -11,15 +13,27 @@ export async function generateStaticParams() {
   ];
 }
 
-async function getContent(contentName: string): Promise<string> {
+/** Nazwy stron do nagłówka i <title>. Treść (HTML) przychodzi z backendu bez zmian. */
+const TITLES: Record<string, string> = {
+  'terms-of-service': 'Regulamin',
+  'privacy-policy': 'Polityka prywatności',
+  about: 'O nas',
+  contact: 'Kontakt',
+  help: 'Pomoc',
+};
+
+export async function generateMetadata({ params }: { params: Promise<{ 'content-name': string }> }) {
+  const { 'content-name': contentName } = await params;
+  return { title: TITLES[contentName] ? `${TITLES[contentName]} — Biovlo` : 'Biovlo' };
+}
+
+/** null = treść niedostępna (błąd serwera albo sieci) — strona pokazuje stan błędu. */
+async function getContent(contentName: string): Promise<string | null> {
+  const fullUrl = `${serverApiUrl()}/api/static-content/${encodeURIComponent(contentName)}`;
   try {
-    const apiUrl = environment.apiUrl;
-    const fullUrl = `${apiUrl}/api/static-content/${contentName}`;
-    console.log('Fetching from:', fullUrl);
-    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 sekund timeout
-    
+
     const response = await fetch(fullUrl, {
       method: 'GET',
       headers: {
@@ -28,65 +42,52 @@ async function getContent(contentName: string): Promise<string> {
       cache: 'no-store',
       signal: controller.signal,
     });
-    
+
     clearTimeout(timeoutId);
-    
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
+
     if (response.ok) {
-      const text = await response.text();
-      console.log('Response text length:', text.length);
-      return text;
+      return await response.text();
     }
-    
-    const errorText = await response.text().catch(() => 'Brak szczegółów błędu');
-    console.error('Server error response:', errorText);
-    return `Błąd ładowania treści: ${response.status} ${response.statusText} - ${fullUrl}`;
+
+    console.error(`Treść statyczna ${fullUrl}: ${response.status} ${response.statusText}`);
+    return null;
   } catch (e) {
-    console.error('Fetch error:', e);
-    const apiUrl = environment.apiUrl;
-    const fullUrl = `${apiUrl}/api/static-content/${contentName}`;
-    return `Błąd połączenia z serwerem: ${fullUrl} - ${e instanceof Error ? e.message : 'Nieznany błąd'}`;
+    console.error(`Treść statyczna ${fullUrl}: błąd połączenia`, e);
+    return null;
   }
 }
 
 export default async function StaticContentPage({ params }: { params: Promise<{ 'content-name': string }> }) {
   const { 'content-name': contentName } = await params;
   const content = await getContent(contentName);
+  const title = TITLES[contentName];
 
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 160px)',
-      backgroundColor: '#f7fafc',
-      padding: '40px 20px'
-    }}>
-      <div style={{
-        maxWidth: '800px',
-        margin: '0 auto'
-      }}>
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '16px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          padding: '40px',
-          marginBottom: '30px'
-        }}>
-          <div style={{
-            textAlign: 'center',
-            marginBottom: '40px'
-          }}>
+    <div className={cn(pageContainer, 'py-6 sm:py-10')}>
+      {title && (
+        <p className="mb-3 text-sm font-medium text-brand">
+          {title}
+        </p>
+      )}
+
+      {content === null ? (
+        <Card padding="lg" className="text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-sunken text-ink-muted" aria-hidden>
+            <LuFileText size={22} />
           </div>
-          <div 
-            style={{
-              color: '#2d3748',
-              lineHeight: '1.6',
-              fontSize: '16px'
-            }}
-            dangerouslySetInnerHTML={{ __html: content }}
-          />
-        </div>
-      </div>
+          <h1 className="text-lg font-semibold text-ink">Nie udało się wczytać treści</h1>
+          <p className="mt-1 text-sm text-ink-muted">Spróbuj odświeżyć stronę za chwilę.</p>
+          <Button href="/" variant="secondary" className="mt-5">
+            Strona główna
+          </Button>
+        </Card>
+      ) : (
+        <Card padding="none" className="p-5 sm:p-10">
+          {/* Treść z backendu (redagowana przez administratora) — wygląd nadaje .static-prose w globals.css */}
+          {/* Karta na całą szerokość kontenera, sam tekst ograniczony do wygodnej długości wiersza */}
+          <article className="static-prose max-w-3xl" dangerouslySetInnerHTML={{ __html: content }} />
+        </Card>
+      )}
     </div>
   );
-} 
+}

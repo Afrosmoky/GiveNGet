@@ -1,31 +1,27 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuLock, LuMail, LuPhone, LuUserPlus, LuUsers } from 'react-icons/lu';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserData, isAuthenticated } from '../../../utils/auth';
+import { authorizedFetch } from '../../../utils/auth';
+import { useRoleGate } from '../../../hooks/useRoleGate';
+import { Badge, Button, Card, CardHeader, Input, PageHeader, Spinner, consolePage } from '../../../components/ui';
 import { describeApiError, parseApiError } from '../../../utils/apiErrors';
 import { formatDateTime, PageResponse } from '../../../types/reservation';
 import { CreateStoreEmployeePayload, StoreEmployee } from '../../../types/storeEmployee';
 
-/** Panel dostępny tylko dla konta firmowego — zgodnie z regułą /api/v1/store-employees/**. */
-const ALLOWED_USER_TYPE = 'COMPANY';
 const PAGE_SIZE = 20;
 const ENDPOINT = `${environment.apiUrl}/api/v1/store-employees`;
 
-type Authorization = 'checking' | 'granted' | 'denied';
 type FormFields = Required<CreateStoreEmployeePayload>;
 type FieldErrors = Partial<Record<keyof FormFields, string>>;
 
 const EMPTY_FORM: FormFields = { firstName: '', lastName: '', email: '', password: '', phoneNumber: '' };
 
-const INPUT_CLASSES =
-  'w-full rounded-lg border-2 border-gray-200 p-2.5 text-base transition-colors focus:border-yellow-400 focus:outline-none focus:ring-4 focus:ring-yellow-200';
 
 export default function StoreEmployeesPage() {
-  const router = useRouter();
-  const [authorization, setAuthorization] = useState<Authorization>('checking');
-
+  // Panel tylko dla konta firmowego — zgodnie z regułą /api/v1/store-employees/**
+  const authorization = useRoleGate('COMPANY');
   const [form, setForm] = useState<FormFields>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -38,21 +34,6 @@ export default function StoreEmployeesPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
-
-  // Bramka roli: AuthGuard zna tylko fakt zalogowania, więc rolę sprawdzamy tutaj
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      setAuthorization('denied');
-      router.replace('/login');
-      return;
-    }
-    if (getUserData()?.userType !== ALLOWED_USER_TYPE) {
-      setAuthorization('denied');
-      router.replace('/unauthorized');
-      return;
-    }
-    setAuthorization('granted');
-  }, [router]);
 
   const loadEmployees = useCallback(async (targetPage: number) => {
     setListLoading(true);
@@ -164,171 +145,125 @@ export default function StoreEmployeesPage() {
 
   if (authorization !== 'granted') {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center px-4">
-        <p className="text-gray-600">
-          {authorization === 'checking' ? 'Sprawdzanie uprawnień…' : 'Brak dostępu do tej strony.'}
-        </p>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Spinner label="Sprawdzanie uprawnień" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">Pracownicy sklepu</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Pracownik loguje się własnym kontem i potwierdza odbiory rezerwacji na oferty Twojego sklepu.
-        </p>
-      </header>
+    <div className={consolePage}>
+      <PageHeader
+        title="Pracownicy sklepu"
+        description="Pracownik loguje się własnym kontem i potwierdza odbiory rezerwacji na oferty Twojego sklepu."
+      />
 
       {/* Formularz dodania */}
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <h2 className="mb-4 text-lg font-bold text-gray-900">Dodaj pracownika</h2>
+      <Card className="mb-6">
+        <CardHeader title="Dodaj pracownika" description="Pracownik zaloguje się tym e-mailem i hasłem — przekaż mu je." />
         <form onSubmit={submit} noValidate>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field id="employee-first-name" label="Imię" error={fieldErrors.firstName}>
-              <input
-                id="employee-first-name"
-                type="text"
-                autoComplete="off"
-                required
-                value={form.firstName}
-                onChange={(e) => updateField('firstName', e.target.value)}
-                className={INPUT_CLASSES}
-              />
-            </Field>
-            <Field id="employee-last-name" label="Nazwisko" error={fieldErrors.lastName}>
-              <input
-                id="employee-last-name"
-                type="text"
-                autoComplete="off"
-                required
-                value={form.lastName}
-                onChange={(e) => updateField('lastName', e.target.value)}
-                className={INPUT_CLASSES}
-              />
-            </Field>
-            <Field id="employee-email" label="E-mail" error={fieldErrors.email}>
-              <input
-                id="employee-email"
-                type="email"
-                autoComplete="off"
-                required
-                value={form.email}
-                onChange={(e) => updateField('email', e.target.value)}
-                className={INPUT_CLASSES}
-              />
-            </Field>
-            <Field
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Input id="employee-first-name" label="Imię" autoComplete="off" required value={form.firstName} onChange={(e) => updateField('firstName', e.target.value)} error={fieldErrors.firstName} />
+            <Input id="employee-last-name" label="Nazwisko" autoComplete="off" required value={form.lastName} onChange={(e) => updateField('lastName', e.target.value)} error={fieldErrors.lastName} />
+            <Input id="employee-email" label="E-mail" type="email" autoComplete="off" required value={form.email} onChange={(e) => updateField('email', e.target.value)} error={fieldErrors.email} leftIcon={<LuMail size={16} />} />
+            <Input
               id="employee-password"
               label="Hasło"
-              hint="co najmniej 8 znaków — przekaż je pracownikowi"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              value={form.password}
+              onChange={(e) => updateField('password', e.target.value)}
               error={fieldErrors.password}
-            >
-              <input
-                id="employee-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={8}
-                value={form.password}
-                onChange={(e) => updateField('password', e.target.value)}
-                className={INPUT_CLASSES}
-              />
-            </Field>
-            <Field id="employee-phone" label="Telefon" optional error={fieldErrors.phoneNumber}>
-              <input
-                id="employee-phone"
-                type="tel"
-                autoComplete="off"
-                value={form.phoneNumber}
-                onChange={(e) => updateField('phoneNumber', e.target.value)}
-                className={INPUT_CLASSES}
-              />
-            </Field>
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full rounded-lg bg-yellow-400 px-4 py-2.5 font-bold text-gray-900 transition hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? 'Tworzę konto…' : 'Utwórz konto pracownika'}
-              </button>
-            </div>
+              hint="Co najmniej 8 znaków."
+              leftIcon={<LuLock size={16} />}
+            />
+            <Input
+              id="employee-phone"
+              label={<>Telefon <span className="font-normal text-ink-subtle">(opcjonalnie)</span></>}
+              type="tel"
+              autoComplete="off"
+              value={form.phoneNumber}
+              onChange={(e) => updateField('phoneNumber', e.target.value)}
+              error={fieldErrors.phoneNumber}
+              leftIcon={<LuPhone size={16} />}
+            />
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <Button type="submit" loading={submitting} leftIcon={<LuUserPlus size={16} />} className="w-full sm:w-auto">
+              {submitting ? 'Tworzę konto…' : 'Utwórz konto pracownika'}
+            </Button>
           </div>
 
           {formError && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
-              {formError}
+            <p role="alert" className="mt-4 flex items-center gap-2 text-sm text-danger">
+              <LuCircleAlert size={16} aria-hidden /> {formError}
             </p>
           )}
           {formSuccess && (
-            <p role="status" className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-              {formSuccess}
+            <p role="status" className="mt-4 flex items-center gap-2 rounded-ui-md border border-success/30 bg-success-soft px-3 py-2.5 text-sm text-brand-strong">
+              <LuCircleCheck size={16} aria-hidden /> {formSuccess}
             </p>
           )}
         </form>
-      </section>
+      </Card>
 
       {/* Lista */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex items-baseline justify-between gap-4">
-          <h2 className="text-lg font-bold text-gray-900">Konta pracowników</h2>
-          {employees && (
-            <span className="text-sm text-gray-500">łącznie: {employees.totalElements}</span>
-          )}
-        </div>
+      <Card>
+        <CardHeader
+          title="Konta pracowników"
+          description={employees ? `Łącznie: ${employees.totalElements}` : undefined}
+        />
 
         {rowError && (
-          <p role="alert" className="mb-3 text-sm text-red-600">
-            {rowError}
+          <p role="alert" className="mb-3 flex items-center gap-2 text-sm text-danger">
+            <LuCircleAlert size={16} aria-hidden /> {rowError}
           </p>
         )}
 
         {listError && (
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="text-sm text-red-700">{listError}</p>
-            <button
-              type="button"
-              onClick={() => void loadEmployees(page)}
-              className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-            >
+          <div role="alert" className="flex flex-col items-start gap-3 rounded-ui-md border border-danger/30 bg-danger-soft p-4">
+            <p className="text-sm text-danger">{listError}</p>
+            <Button variant="secondary" size="sm" onClick={() => void loadEmployees(page)}>
               Spróbuj ponownie
-            </button>
+            </Button>
           </div>
         )}
 
         {!listError && !employees && listLoading && (
-          <p aria-busy="true" className="py-6 text-center text-sm text-gray-500">
-            Wczytywanie…
-          </p>
+          <div className="space-y-3" aria-busy="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse rounded-ui-md bg-surface-sunken" />
+            ))}
+          </div>
         )}
 
         {!listError && employees && employees.totalElements === 0 && (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-8 text-center">
-            <p className="font-semibold text-gray-900">Nie masz jeszcze pracowników</p>
-            <p className="mt-1 text-sm text-gray-600">Dodaj pierwsze konto formularzem powyżej.</p>
+          <div className="flex flex-col items-center gap-2 py-10 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand" aria-hidden>
+              <LuUsers size={22} />
+            </span>
+            <p className="font-medium text-ink">Nie masz jeszcze pracowników</p>
+            <p className="text-sm text-ink-muted">Dodaj pierwsze konto formularzem powyżej.</p>
           </div>
         )}
 
         {!listError && employees && employees.content.length > 0 && (
-          <div className={listLoading ? 'opacity-60' : ''}>
+          <div className={listLoading ? 'opacity-60 transition-opacity' : undefined}>
             {/* Wąski ekran: karty zamiast tabeli */}
-            <ul className="divide-y divide-gray-100 md:hidden">
+            <ul className="divide-y divide-line md:hidden">
               {employees.content.map((employee) => (
-                <li key={employee.id} className="py-3">
+                <li key={employee.id} className="py-3 first:pt-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-ink">
                         {employee.firstName} {employee.lastName}
                       </p>
-                      <p className="break-all text-sm text-gray-600">{employee.email}</p>
-                      {employee.phoneNumber && (
-                        <p className="text-sm text-gray-600">{employee.phoneNumber}</p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-500">
-                        Utworzono: {formatDateTime(employee.createdAt)}
-                      </p>
+                      <p className="break-all text-sm text-ink-muted">{employee.email}</p>
+                      {employee.phoneNumber && <p className="text-sm text-ink-muted">{employee.phoneNumber}</p>}
+                      <p className="mt-1 text-xs text-ink-subtle">Utworzono: {formatDateTime(employee.createdAt)}</p>
                     </div>
                     <StatusBadge active={employee.active} />
                   </div>
@@ -344,32 +279,30 @@ export default function StoreEmployeesPage() {
 
             <table className="hidden w-full text-left text-sm md:table">
               <thead>
-                <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
-                  <th className="py-2 pr-3 font-semibold">Imię i nazwisko</th>
-                  <th className="py-2 pr-3 font-semibold">E-mail</th>
-                  <th className="py-2 pr-3 font-semibold">Telefon</th>
-                  <th className="py-2 pr-3 font-semibold">Utworzono</th>
-                  <th className="py-2 pr-3 font-semibold">Status</th>
-                  <th className="py-2 font-semibold">
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-subtle">
+                  <th className="py-2.5 pr-3 font-medium">Imię i nazwisko</th>
+                  <th className="px-3 py-2.5 font-medium">E-mail</th>
+                  <th className="px-3 py-2.5 font-medium">Telefon</th>
+                  <th className="px-3 py-2.5 font-medium">Utworzono</th>
+                  <th className="px-3 py-2.5 font-medium">Status</th>
+                  <th className="py-2.5 pl-3 font-medium">
                     <span className="sr-only">Akcje</span>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {employees.content.map((employee) => (
-                  <tr key={employee.id}>
-                    <td className="py-3 pr-3 font-semibold text-gray-900">
+                  <tr key={employee.id} className="border-b border-line last:border-0">
+                    <td className="py-3 pr-3 font-medium text-ink">
                       {employee.firstName} {employee.lastName}
                     </td>
-                    <td className="break-all py-3 pr-3 text-gray-700">{employee.email}</td>
-                    <td className="py-3 pr-3 text-gray-700">{employee.phoneNumber || '—'}</td>
-                    <td className="whitespace-nowrap py-3 pr-3 text-gray-700">
-                      {formatDateTime(employee.createdAt)}
-                    </td>
-                    <td className="py-3 pr-3">
+                    <td className="break-all px-3 py-3 text-ink-muted">{employee.email}</td>
+                    <td className="px-3 py-3 text-ink-muted">{employee.phoneNumber || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-3 tabular-nums text-ink-muted">{formatDateTime(employee.createdAt)}</td>
+                    <td className="px-3 py-3">
                       <StatusBadge active={employee.active} />
                     </td>
-                    <td className="py-3 text-right">
+                    <td className="py-3 pl-3 text-right">
                       <ToggleButton
                         employee={employee}
                         busy={togglingId === employee.id}
@@ -383,76 +316,37 @@ export default function StoreEmployeesPage() {
 
             {employees.totalPages > 1 && (
               <nav className="mt-4 flex items-center justify-between gap-3" aria-label="Strony listy pracowników">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0 || listLoading}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  ‹ Poprzednia
-                </button>
-                <span className="text-sm text-gray-600">
+                <Button variant="secondary" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || listLoading} leftIcon={<LuChevronLeft size={16} />}>
+                  Poprzednia
+                </Button>
+                <span className="text-sm text-ink-muted">
                   Strona {employees.page + 1} z {employees.totalPages}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={page + 1 >= employees.totalPages || listLoading}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Następna ›
-                </button>
+                <Button variant="secondary" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= employees.totalPages || listLoading} rightIcon={<LuChevronRight size={16} />}>
+                  Następna
+                </Button>
               </nav>
             )}
           </div>
         )}
 
-        <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          Dezaktywowany pracownik nie zaloguje się ani nie potwierdzi odbioru. Konto można w każdej
-          chwili aktywować ponownie.
+        <p className="mt-4 border-t border-line pt-3 text-xs text-ink-subtle">
+          Dezaktywowany pracownik nie zaloguje się ani nie potwierdzi odbioru. Konto można w każdej chwili aktywować ponownie.
         </p>
-      </section>
-    </div>
-  );
-}
-
-function Field({
-  id,
-  label,
-  hint,
-  optional = false,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  hint?: string;
-  optional?: boolean;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-semibold text-gray-700">
-        {label}
-        {optional && <span className="font-normal text-gray-500"> (opcjonalnie)</span>}
-      </label>
-      {children}
-      {hint && !error && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </Card>
     </div>
   );
 }
 
 function StatusBadge({ active }: { active: boolean }) {
   return active ? (
-    <span className="inline-block shrink-0 rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-800">
-      aktywny
-    </span>
+    <Badge tone="success" dot className="shrink-0">
+      Aktywny
+    </Badge>
   ) : (
-    <span className="inline-block shrink-0 rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600">
-      dezaktywowany
-    </span>
+    <Badge tone="neutral" dot className="shrink-0">
+      Dezaktywowany
+    </Badge>
   );
 }
 
@@ -460,7 +354,7 @@ function ToggleButton({
   employee,
   busy,
   onClick,
-  className = '',
+  className,
 }: {
   employee: StoreEmployee;
   busy: boolean;
@@ -468,18 +362,16 @@ function ToggleButton({
   className?: string;
 }) {
   const label = employee.active ? 'Dezaktywuj' : 'Aktywuj';
-  const tone = employee.active
-    ? 'border-red-300 text-red-700 hover:bg-red-50'
-    : 'border-green-300 text-green-700 hover:bg-green-50';
   return (
-    <button
-      type="button"
+    <Button
+      variant={employee.active ? 'ghost' : 'secondary'}
+      size="sm"
       onClick={onClick}
-      disabled={busy}
+      loading={busy}
       aria-label={`${label}: ${employee.firstName} ${employee.lastName}`}
-      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${tone} ${className}`}
+      className={employee.active ? `!text-danger hover:bg-danger-soft ${className ?? ''}` : className}
     >
       {busy ? 'Zapisuję…' : label}
-    </button>
+    </Button>
   );
 }

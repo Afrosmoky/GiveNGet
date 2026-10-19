@@ -6,7 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { environment } from "../../config";
 import { saveAuthData } from "../../utils/auth";
 import { AuthGuard } from "../../components/AuthGuard";
-import Image from "next/image";
+import { LuEye, LuEyeOff, LuLock, LuMail } from "react-icons/lu";
+import { AuthCard, AuthNotice, authLinkClass } from "../../components/auth/AuthCard";
+import { Button, IconButton, Input, cn } from "../../components/ui";
+import { describeErrorCode, parseApiError } from "../../utils/apiErrors";
+
+/** Kody dla odpowiedzi bez treści w formacie 6.3 (backend sprzed zmiany kontraktu logowania). */
+const LEGACY_STATUS_CODES: Record<number, string> = {
+  400: "INVALID_CREDENTIALS",
+  401: "ACCOUNT_NOT_CONFIRMED",
+  429: "RATE_LIMIT_EXCEEDED",
+};
 
 function LoginPageContent() {
   const router = useRouter();
@@ -32,15 +42,7 @@ function LoginPageContent() {
     password: false,
   });
 
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Sprawdź czy jesteśmy na urządzeniu mobilnym
-  useEffect(() => {
-    const updateIsMobile = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth <= 640);
-    updateIsMobile();
-    window.addEventListener('resize', updateIsMobile);
-    return () => window.removeEventListener('resize', updateIsMobile);
-  }, []);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Sprawdź parametry URL po załadowaniu komponentu
   useEffect(() => {
@@ -150,10 +152,6 @@ function LoginPageContent() {
           password: formData.password,
         };
 
-        console.log(
-          "Wysyłam dane logowania na:",
-          `${environment.apiUrl}/api/auth/login`
-        );
 
         const response = await fetch(`${environment.apiUrl}/api/auth/login`, {
           method: "POST",
@@ -164,11 +162,9 @@ function LoginPageContent() {
           mode: "cors",
         });
 
-        console.log("Odpowiedź:", response);
 
         if (response.ok) {
           const result = await response.json();
-          console.log("Sukces:", result);
 
           // Walidacja userType
           // STORE_EMPLOYEE = pracownik sklepu (potwierdzanie odbioru rezerwacji).
@@ -225,26 +221,24 @@ function LoginPageContent() {
             }
           }, 1500);
         } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error("Błąd serwera:", errorData);
-          console.log("Status:", response.status);
+          // Rozgałęzienie po `code` (format 6.3); status tylko jako fallback dla starszego backendu
+          const body = await response.text().catch(() => '');
+          const apiError = parseApiError(body);
+          const code = apiError?.code ?? LEGACY_STATUS_CODES[response.status];
 
-          if (response.status === 400) {
-            setSubmitMessage({
-              type: "error",
-              text: "Niepoprawny email lub hasło. Sprawdź swoje dane logowania.",
-            });
-          } else if (response.status === 401) {
+          if (code === 'ACCOUNT_NOT_CONFIRMED') {
             router.push(
               `/user-not-confirmed?email=${encodeURIComponent(formData.email)}`
             );
             return;
-          } else {
-            setSubmitMessage({
-              type: "error",
-              text: "Wystąpił nieznany błąd. Spróbuj ponownie. Lub skontaktuj się z administratorem.",
-            });
           }
+
+          setSubmitMessage({
+            type: "error",
+            text: code
+              ? describeErrorCode(code, apiError?.message ?? '')
+              : "Wystąpił nieznany błąd. Spróbuj ponownie lub skontaktuj się z administratorem.",
+          });
         }
       } catch (error) {
         console.error("Błąd połączenia:", error);
@@ -258,260 +252,71 @@ function LoginPageContent() {
     }
   };
 
-  const getInputStyle = (fieldName: keyof typeof errors) => ({
-    width: "100%",
-    padding: "16px",
-    border: "none",
-    borderBottom: `2px solid ${errors[fieldName] ? "#ef4444" : "#e2e8f0"}`,
-    fontSize: "16px",
-    backgroundColor: "transparent",
-    outline: "none",
-    transition: "border-color 0.3s",
-    color: "#2d3748",
-  });
-
-  const handleInputFocus = (
-    e: React.FocusEvent<HTMLInputElement>,
-    fieldName: keyof typeof errors
-  ) => {
-    if (!errors[fieldName]) {
-      e.target.style.borderBottomColor = "#fbbf24";
-    }
-  };
-
-
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#f7fafc",
-        padding: "0px 20px",
-        paddingTop: isMobile ? "20px" : "0px",
-        paddingBottom: isMobile ? "120px" : "0px",
-      }}
+    <AuthCard
+      title="Zaloguj się"
+      description="Ratuj jedzenie z okolicy — taniej albo za darmo."
+      footer={
+        <>
+          Nie masz konta?{" "}
+          <Link href="/register" className={authLinkClass}>
+            Załóż konto
+          </Link>
+        </>
+      }
     >
-      <div
-        style={{
-          backgroundColor: "white",
-          borderRadius: "16px",
-          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-          width: "100%",
-          maxWidth: "500px",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Kontener z paddingiem dla zawartości */}
-        <div style={{ padding: isMobile ? "20px" : "40px" }}>
-          {/* Logo na górze */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              marginBottom: isMobile ? "20px" : "30px",
-            }}
-          >
-            <Image
-              src="/images/logo.png"
-              alt="GnG Logo"
-              width={isMobile ? 120 : 150}
-              height={isMobile ? 60 : 75}
-              style={{ objectFit: "contain" }}
-            />
-          </div>
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        {submitMessage && <AuthNotice tone={submitMessage.type === "success" ? "success" : "danger"}>{submitMessage.text}</AuthNotice>}
 
-          {/* Kolorowa grafika z jedzeniem */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              marginBottom: isMobile ? "20px" : "30px",
-            }}
-          >
-            <Image
-              src="/images/food-image.svg"
-              alt="Food Image"
-              width={isMobile ? 250 : 300}
-              height={isMobile ? 150 : 200}
-              style={{ objectFit: "contain", width: "100%" }}
-            />
-          </div>
+        <Input
+          label="E-mail"
+          type="email"
+          name="email"
+          autoComplete="email"
+          inputMode="email"
+          size="lg"
+          value={formData.email}
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          placeholder="ty@przyklad.pl"
+          error={errors.email || undefined}
+          leftIcon={<LuMail size={16} />}
+        />
 
-          {/* Przyciski Logowanie i Rejestracja */}
-          <div
-            style={{
-              display: "flex",
-              gap: isMobile ? "12px" : "20px",
-              marginBottom: isMobile ? "20px" : "30px",
-            }}
-          >
-            <div
-              style={{
-                flex: 1,
-                padding: "16px",
-                backgroundColor: "#f7fafc",
-                borderRadius: "8px",
-                textAlign: "center",
-                fontSize: "16px",
-                fontWeight: "bold",
-                color: "#2d3748",
-                border: "2px solid #fbbf24",
-              }}
-            >
-              Logowanie
-            </div>
-            <Link
-              href="/register"
-              style={{
-                flex: 1,
-                padding: "16px",
-                backgroundColor: "#f7fafc",
-                borderRadius: "8px",
-                textAlign: "center",
-                fontSize: "16px",
-                fontWeight: "bold",
-                color: "#4a5568",
-                textDecoration: "none",
-                border: "2px solid #e2e8f0",
-                transition: "all 0.3s",
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = "#fbbf24";
-                e.currentTarget.style.color = "#2d3748";
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = "#e2e8f0";
-                e.currentTarget.style.color = "#4a5568";
-              }}
-            >
-              Rejestracja
+        <div>
+          <Input
+            label="Hasło"
+            type={showPassword ? "text" : "password"}
+            name="password"
+            autoComplete="current-password"
+            size="lg"
+            value={formData.password}
+            onChange={handleInputChange}
+            onBlur={handleBlur}
+            placeholder="Twoje hasło"
+            error={errors.password || undefined}
+            leftIcon={<LuLock size={16} />}
+            rightSlot={
+              <IconButton
+                label={showPassword ? "Ukryj hasło" : "Pokaż hasło"}
+                icon={showPassword ? <LuEyeOff size={16} /> : <LuEye size={16} />}
+                onClick={() => setShowPassword(v => !v)}
+                className="h-9 w-9"
+              />
+            }
+          />
+          <div className="mt-2 text-right">
+            <Link href="/reset-password" className={cn(authLinkClass, "text-sm")}>
+              Nie pamiętasz hasła?
             </Link>
           </div>
-
-          <form onSubmit={handleSubmit} noValidate>
-            <div style={{ marginBottom: "20px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "8px",
-                  color: "#4a5568",
-                  fontSize: "16px",
-                }}
-              >
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                onBlur={handleBlur}
-                style={getInputStyle("email")}
-                onFocus={(e) => handleInputFocus(e, "email")}
-                placeholder="Wprowadź swój email"
-              />
-              {errors.email && (
-                <div
-                  style={{ color: "red", fontSize: "12px", marginTop: "4px" }}
-                >
-                  {errors.email}
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: "20px" }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: "8px",
-                  color: "#4a5568",
-                  fontSize: "16px",
-                }}
-              >
-                Hasło
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                onBlur={handleBlur}
-                style={getInputStyle("password")}
-                onFocus={(e) => handleInputFocus(e, "password")}
-                placeholder="Wprowadź swoje hasło"
-              />
-              {errors.password && (
-                <div
-                  style={{ color: "red", fontSize: "12px", marginTop: "4px" }}
-                >
-                  {errors.password}
-                </div>
-              )}
-            </div>
-
-            {/* Link do resetowania hasła */}
-            <div
-              style={{
-                textAlign: "center",
-                marginBottom: "20px",
-              }}
-            >
-              <span style={{ color: "#4a5568", fontSize: "14px" }}>
-                Zapomniałeś/łaś hasła?{" "}
-              </span>
-              <Link
-                href="/reset-password"
-                style={{
-                  color: "#fbbf24",
-                  textDecoration: "none",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                Resetuj tutaj
-              </Link>
-            </div>
-
-            {/* Komunikat o wyniku wysyłania */}
-            {submitMessage && (
-              <div
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  marginBottom: "20px",
-                  backgroundColor:
-                    submitMessage.type === "success" ? "#f0fff4" : "#fef2f2",
-                  border: `1px solid ${
-                    submitMessage.type === "success" ? "#68d391" : "#f87171"
-                  }`,
-                  color:
-                    submitMessage.type === "success" ? "#2d3748" : "#dc2626",
-                  textAlign: "center",
-                }}
-              >
-                {submitMessage.text}
-              </div>
-            )}
-
-            {/* Przycisk Zaloguj */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`btn-primary ${isSubmitting ? 'btn-loading' : ''}`}
-            >
-              {isSubmitting && (
-                <div className="loading-spinner" />
-              )}
-              {isSubmitting ? "Logowanie..." : "Zaloguj"}
-            </button>
-          </form>
         </div>
-      </div>
-    </div>
+
+        <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
+          {isSubmitting ? "Logowanie…" : "Zaloguj"}
+        </Button>
+      </form>
+    </AuthCard>
   );
 }
 
