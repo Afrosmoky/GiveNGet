@@ -60,8 +60,7 @@ export function isNavActive(pathname: string, item: NavItem): boolean {
 
 export const consumerTopNav: NavItem[] = [
   { label: 'Oferty', href: '/offers/search', icon: FiSearch },
-  // Mapa jest dziś częścią wyników w /offers/search (pokazuje się dopiero po wyszukaniu) — osobny widok w kolejnym kroku
-  { label: 'Mapa', icon: FiMap },
+  { label: 'Mapa', href: '/offers/map', icon: FiMap },
   { label: 'Moje rezerwacje', href: '/reservations', icon: FiCalendar },
   { label: 'Ulubione', href: '/favorites', icon: FiHeart },
 ];

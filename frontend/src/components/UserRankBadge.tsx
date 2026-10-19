@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { UserRank, RANK_LABELS } from '../types/offer';
 import RankInfoModal from './RankInfoModal';
+import { rankStyle } from './rank/rankStyles';
+import { cn } from './ui';
 
 interface UserRankBadgeProps {
   rank?: UserRank | string;
@@ -13,6 +15,12 @@ interface UserRankBadgeProps {
   clickable?: boolean;
 }
 
+const SIZES = {
+  small: { pill: 'px-2 py-0.5 text-xs', icon: 12 },
+  medium: { pill: 'px-2.5 py-1 text-sm', icon: 14 },
+  large: { pill: 'px-3 py-1.5 text-base', icon: 16 },
+} as const;
+
 export const UserRankBadge: React.FC<UserRankBadgeProps> = ({
   rank = 'STARTER',
   trustPoints = 0,
@@ -22,110 +30,32 @@ export const UserRankBadge: React.FC<UserRankBadgeProps> = ({
   clickable = true
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const getRankColor = (rank: UserRank | string) => {
-    switch (rank) {
-      case 'STARTER':
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          border: 'border-gray-300',
-          icon: '⭐'
-        };
-      case 'RELIABLE_SELLER':
-        return {
-          bg: 'bg-blue-100',
-          text: 'text-blue-800',
-          border: 'border-blue-300',
-          icon: '🏆'
-        };
-      case 'TRUSTED_PARTNER':
-        return {
-          bg: 'bg-purple-100',
-          text: 'text-purple-800',
-          border: 'border-purple-300',
-          icon: '💎'
-        };
-      case 'LOCAL_HERO':
-        return {
-          bg: 'bg-orange-100',
-          text: 'text-orange-800',
-          border: 'border-orange-300',
-          icon: '🌟'
-        };
-      case 'AMBASSADOR':
-        return {
-          bg: 'bg-yellow-100',
-          text: 'text-yellow-800',
-          border: 'border-yellow-300',
-          icon: '👑'
-        };
-      default:
-        return {
-          bg: 'bg-gray-100',
-          text: 'text-gray-800',
-          border: 'border-gray-300',
-          icon: '⭐'
-        };
-    }
-  };
+  const { icon: Icon, pill } = rankStyle(rank);
+  const sizes = SIZES[size] ?? SIZES.medium;
 
-  const getSizeClasses = () => {
-    switch (size) {
-      case 'small':
-        return {
-          container: 'px-2 py-1 text-xs',
-          icon: 'text-xs',
-          text: 'text-xs'
-        };
-      case 'medium':
-        return {
-          container: 'px-3 py-1.5 text-sm',
-          icon: 'text-sm',
-          text: 'text-sm'
-        };
-      case 'large':
-        return {
-          container: 'px-4 py-2 text-base',
-          icon: 'text-base',
-          text: 'text-base'
-        };
-      default:
-        return {
-          container: 'px-3 py-1.5 text-sm',
-          icon: 'text-sm',
-          text: 'text-sm'
-        };
-    }
-  };
+  const content = (
+    <>
+      <Icon size={sizes.icon} aria-hidden className="shrink-0" />
+      <span className="font-medium">{RANK_LABELS[rank as UserRank] || 'Nowicjusz'}</span>
+      {showPoints && <span className="opacity-75">({trustPoints} PZ)</span>}
+    </>
+  );
+  const classes = cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border', pill, sizes.pill, className);
 
-  const colors = getRankColor(rank);
-  const sizes = getSizeClasses();
-
-  const handleClick = () => {
-    if (clickable) {
-      setIsModalOpen(true);
-    }
-  };
+  if (!clickable) {
+    return <span className={classes}>{content}</span>;
+  }
 
   return (
     <>
-      <div 
-        className={`inline-flex items-center gap-1.5 rounded-full border ${colors.bg} ${colors.text} ${colors.border} ${sizes.container} ${className} ${
-          clickable ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
-        }`}
-        onClick={handleClick}
-        title={clickable ? 'Kliknij aby zobaczyć informacje o rangach' : ''}
+      <button
+        type="button"
+        className={cn(classes, 'transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40')}
+        onClick={() => setIsModalOpen(true)}
+        title="Zobacz, jak działają rangi"
       >
-        <span className={sizes.icon}>{colors.icon}</span>
-        <span className={`font-medium ${sizes.text}`}>
-          {RANK_LABELS[rank as UserRank] || 'Nowicjusz'}
-        </span>
-        {showPoints && (
-          <span className={`${sizes.text} opacity-75`}>
-            ({trustPoints} PZ)
-          </span>
-        )}
-      </div>
+        {content}
+      </button>
 
       <RankInfoModal
         isOpen={isModalOpen}

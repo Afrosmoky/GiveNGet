@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
+import { LuCircleAlert } from 'react-icons/lu';
+import { Button, Card, cn, pageContainer } from '../components/ui';
 
 export default function Error({
   error,
@@ -15,32 +16,20 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="page-container">
-      <div className="form-container">
-        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <h1 style={{ fontSize: '48px', marginBottom: '20px', color: '#dc2626' }}>
-            Błąd
-          </h1>
-          <h2 style={{ fontSize: '24px', marginBottom: '20px', color: '#4a5568' }}>
-            Coś poszło nie tak
-          </h2>
-          <p style={{ fontSize: '16px', marginBottom: '30px', color: '#718096' }}>
-            Wystąpił nieoczekiwany błąd. Spróbuj ponownie.
-          </p>
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={reset}
-              className="btn-primary"
-              style={{ display: 'inline-block', textDecoration: 'none' }}
-            >
-              Spróbuj ponownie
-            </button>
-            <Link href="/" className="btn-secondary" style={{ display: 'inline-block', textDecoration: 'none' }}>
-              Wróć do strony głównej
-            </Link>
-          </div>
+    <div className={cn(pageContainer, 'py-12 sm:py-16')}>
+      <Card padding="lg" role="alert" className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger">
+          <LuCircleAlert size={24} aria-hidden />
+        </span>
+        <h1 className="text-xl font-semibold text-brand-ink">Coś poszło nie tak</h1>
+        <p className="text-sm text-ink-muted">Wystąpił nieoczekiwany błąd. Spróbuj ponownie.</p>
+        <div className="mt-2 flex flex-wrap justify-center gap-2">
+          <Button onClick={reset}>Spróbuj ponownie</Button>
+          <Button variant="secondary" href="/">
+            Wróć do strony głównej
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
-} 
+}

@@ -1,6 +1,8 @@
 "use client";
 
 import React from 'react';
+import { LuFilePlus } from 'react-icons/lu';
+import { cn } from './ui';
 
 interface FreeOffersCounterProps {
   freeOffersCount: number;
@@ -9,87 +11,43 @@ interface FreeOffersCounterProps {
   className?: string;
 }
 
+const SIZES = {
+  small: { pill: 'px-2 py-0.5 text-xs', icon: 12 },
+  medium: { pill: 'px-2.5 py-1 text-sm', icon: 14 },
+  large: { pill: 'px-3 py-1.5 text-base', icon: 16 },
+} as const;
+
+/** Limit darmowych ofert w miesiącu — zielony, gdy jest zapas; ostrzeżenie przy końcu limitu. */
 export const FreeOffersCounter: React.FC<FreeOffersCounterProps> = ({
   freeOffersCount,
   size = 'medium',
   showWarning = true,
   className = ''
 }) => {
-  const getSizeClasses = () => {
-    switch (size) {
-      case 'small':
-        return {
-          container: 'px-2 py-1 text-xs',
-          text: 'text-xs',
-          icon: 'text-xs'
-        };
-      case 'medium':
-        return {
-          container: 'px-3 py-1.5 text-sm',
-          text: 'text-sm',
-          icon: 'text-sm'
-        };
-      case 'large':
-        return {
-          container: 'px-4 py-2 text-base',
-          text: 'text-base',
-          icon: 'text-base'
-        };
-      default:
-        return {
-          container: 'px-3 py-1.5 text-sm',
-          text: 'text-sm',
-          icon: 'text-sm'
-        };
-    }
-  };
+  const sizes = SIZES[size] ?? SIZES.medium;
 
-  const getColorClasses = () => {
-    if (freeOffersCount === 0) {
-      return {
-        bg: 'bg-red-100',
-        text: 'text-red-800',
-        border: 'border-red-300'
-      };
-    } else if (freeOffersCount <= 2) {
-      return {
-        bg: 'bg-orange-100',
-        text: 'text-orange-800',
-        border: 'border-orange-300'
-      };
-    } else {
-      return {
-        bg: 'bg-green-100',
-        text: 'text-green-800',
-        border: 'border-green-300'
-      };
-    }
-  };
+  const tone =
+    freeOffersCount === 0
+      ? 'border-danger/30 bg-danger-soft text-danger'
+      : freeOffersCount <= 2
+        ? 'border-warning/30 bg-warning-soft text-warning'
+        : 'border-brand/20 bg-brand-soft text-brand-strong';
 
-  const sizes = getSizeClasses();
-  const colors = getColorClasses();
-
-  const getWarningMessage = () => {
-    if (freeOffersCount === 0) {
-      return "Brak darmowych ofert! Utwórz ofertę w następnym miesiącu lub rozważ boost.";
-    } else if (freeOffersCount <= 2) {
-      return "Pozostało tylko kilka darmowych ofert w tym miesiącu.";
-    }
-    return null;
-  };
+  const warning =
+    freeOffersCount === 0
+      ? 'Brak darmowych ofert! Utwórz ofertę w następnym miesiącu lub rozważ boost.'
+      : freeOffersCount <= 2
+        ? 'Pozostało tylko kilka darmowych ofert w tym miesiącu.'
+        : null;
 
   return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full border ${colors.bg} ${colors.text} ${colors.border} ${sizes.container} ${className}`}>
-      <span className={sizes.icon}>📝</span>
-      <span className={`font-medium ${sizes.text}`}>
+    <span className={cn('inline-flex flex-col items-center gap-1', className)}>
+      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border font-medium', tone, sizes.pill)}>
+        <LuFilePlus size={sizes.icon} aria-hidden className="shrink-0" />
         {freeOffersCount} darmowych ofert
       </span>
-      {showWarning && getWarningMessage() && (
-        <div className="mt-1 text-xs opacity-75">
-          {getWarningMessage()}
-        </div>
-      )}
-    </div>
+      {showWarning && warning && <span className="text-center text-xs text-ink-muted">{warning}</span>}
+    </span>
   );
 };
 

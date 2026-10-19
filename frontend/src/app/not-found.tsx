@@ -1,24 +1,20 @@
-import Link from 'next/link';
+import { LuSearchX } from 'react-icons/lu';
+import { Button, Card, cn, pageContainer } from '../components/ui';
 
 export default function NotFound() {
   return (
-    <div className="page-container">
-      <div className="form-container">
-        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <h1 style={{ fontSize: '48px', marginBottom: '20px', color: '#2d3748' }}>
-            404
-          </h1>
-          <h2 style={{ fontSize: '24px', marginBottom: '20px', color: '#4a5568' }}>
-            Strona nie została znaleziona
-          </h2>
-          <p style={{ fontSize: '16px', marginBottom: '30px', color: '#718096' }}>
-            Przepraszamy, ale strona której szukasz nie istnieje.
-          </p>
-          <Link href="/" className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none' }}>
-            Wróć do strony głównej
-          </Link>
-        </div>
-      </div>
+    <div className={cn(pageContainer, 'py-12 sm:py-16')}>
+      <Card padding="lg" className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft text-brand">
+          <LuSearchX size={24} aria-hidden />
+        </span>
+        <p className="text-sm font-semibold uppercase tracking-wide text-ink-subtle">Błąd 404</p>
+        <h1 className="text-xl font-semibold text-brand-ink">Strona nie została znaleziona</h1>
+        <p className="text-sm text-ink-muted">Przepraszamy, ale strona, której szukasz, nie istnieje.</p>
+        <Button href="/" className="mt-2">
+          Wróć do strony głównej
+        </Button>
+      </Card>
     </div>
   );
-} 
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -96,6 +96,12 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
   const { toggleFavorite, loading } = useFavorites();
   const { addError } = useErrorContext();
   const [localIsFavorite, setLocalIsFavorite] = useState(offer.isFavorite || false);
+
+  // Dostępność w stanie — po rezerwacji panel podnosi tu nową wartość z odpowiedzi backendu
+  const [availableQuantity, setAvailableQuantity] = useState(offer.availableQuantity);
+  useEffect(() => {
+    setAvailableQuantity(offer.availableQuantity);
+  }, [offer.availableQuantity]);
 
   // Sprawdź czy użytkownik jest autorem oferty
   const userData = getUserData();
@@ -292,12 +298,12 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
               </div>
 
               <dl className="mt-4 flex flex-col gap-2.5 border-t border-line pt-4 text-sm">
-                {typeof offer.availableQuantity === 'number' && (
+                {typeof availableQuantity === 'number' && (
                   <div className="flex items-center justify-between gap-3">
                     <dt className="text-ink-muted">Dostępność</dt>
                     <dd>
-                      {offer.availableQuantity > 0 ? (
-                        <StatusPill status="remaining" count={offer.availableQuantity} size="md" />
+                      {availableQuantity > 0 ? (
+                        <StatusPill status="remaining" count={availableQuantity} size="md" />
                       ) : (
                         <StatusPill status="soldout" size="md" />
                       )}
@@ -404,8 +410,9 @@ export default function OfferDetailsView({ offer, isPreview = false, onBackToEdi
             {canReserve && offer.id && (
               <ReserveOfferPanel
                 offerId={offer.id}
-                availableQuantity={offer.availableQuantity as number}
+                availableQuantity={availableQuantity as number}
                 totalQuantity={offer.quantity ?? null}
+                onAvailabilityChange={setAvailableQuantity}
               />
             )}
 

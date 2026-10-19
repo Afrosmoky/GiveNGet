@@ -1,35 +1,26 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { environment } from '../../../config';
-import { authorizedFetch, getUserLocation, updateUserData } from '../../../utils/auth';
+import { authorizedFetch, getUserLocation } from '../../../utils/auth';
 import { AuthGuard } from '../../../components/AuthGuard';
 import GoogleMapComponent from '../../../components/GoogleMapComponent';
 import { useFavorites } from '../../../hooks/useFavorites';
 import { useErrorContext } from '../../../context/ErrorContext';
-import { FaLocationCrosshairs } from 'react-icons/fa6';
 import { FiChevronDown, FiSearch } from 'react-icons/fi';
-import { Button, Card, CardHeader, Chip, IconButton, Input, PageHeader, Spinner } from '../../../components/ui';
+import { LuMapPin } from 'react-icons/lu';
+import { useLocationPicker } from '../../../hooks/useLocationPicker';
+import { LocationField } from '../../../components/location/LocationField';
+import { Button, Card, CardHeader, Chip, PageHeader, Spinner } from '../../../components/ui';
 import { ApiOffer, TransactionType, Category } from '../../../types/offer';
 import OfferTile from '../../../components/OfferTile';
+import { offersForMap, zoomForRange } from '../../../utils/offerMap';
 import { OfferTileSkeleton } from '../../../components/offer/OfferTileSkeleton';
 
-interface LocationSuggestion {
-  country: string;
-  country_code: string;
-  state: string;
-  county: string | null;
-  city: string;
-  lon: number;
-  lat: number;
-  formatted: string;
-}
 
 // Używamy ApiOffer zamiast lokalnego interfejsu Offer
 
 interface SearchFilters {
-  lat?: number;
-  lon?: number;
   range?: number;
   distanceUnit?: 'KILOMETERS' | 'MILES';
   transactionTypes: TransactionType[];
@@ -41,7 +32,6 @@ interface SearchFilters {
 const RESULTS_GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-4';
 
 function SearchOffersPageContent() {
-  const isGpsUpdate = useRef(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [offers, setOffers] = useState<ApiOffer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,11 +48,12 @@ function SearchOffersPageContent() {
   const { toggleFavorite } = useFavorites();
   const { addError } = useErrorContext();
 
-  // Stan dla wyszukiwania lokalizacji
-  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
-  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
-  const [locationSearching, setLocationSearching] = useState(false);
-  const [locationInput, setLocationInput] = useState('');
+  // Lokalizacja: pole miasta (Geoapify) + GPS — wspólne z widokiem mapy
+  const location = useLocationPicker();
+  const locationInputRef = useRef<HTMLInputElement>(null);
+  const locationSectionRef = useRef<HTMLDivElement>(null);
+  /** „Szukaj” kliknięte bez lokalizacji — wyraźny komunikat przy polu. */
+  const [locationMissing, setLocationMissing] = useState(false);
 
   // Filtry wyszukiwania
   const [filters, setFilters] = useState<SearchFilters>({
@@ -88,8 +79,8 @@ function SearchOffersPageContent() {
       distanceUnit: '',
     };
 
-    if (filters.lat === undefined || filters.lon === undefined) {
-      newErrors.location = 'Lokalizacja jest wymagana.';
+    if (!location.coords) {
+      newErrors.location = 'Podaj lokalizację — wpisz miasto albo użyj GPS.';
     }
 
     if (!filters.range || filters.range <= 0) {
@@ -145,82 +136,6 @@ function SearchOffersPageContent() {
     setIsMapCollapsed(savedCollapsedState);
   }, []);
 
-  // Funkcja pobierania aktualnej lokalizacji GPS
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          isGpsUpdate.current = true;
-          const { latitude, longitude } = position.coords;
-          
-          // Zapisz lokalizację w localStorage, aby była dostępna dla mapy
-          updateUserData({ lat: latitude, lon: longitude });
-          
-          try {
-            // Reverse geocoding - pobierz nazwę lokalizacji z współrzędnych
-            const response = await authorizedFetch(`${environment.apiUrl}/api/geocode/reverse?lat=${latitude}&lon=${longitude}`, {
-              method: 'GET'
-            });
-
-            if (response.ok) {
-              const data: LocationSuggestion = await response.json();
-              
-              if (data.formatted) {
-                const displayName = data.formatted;
-                
-                setLocationInput(displayName);
-                setFilters(prev => ({
-                  ...prev,
-                  lat: latitude,
-                  lon: longitude
-                }));
-                
-                console.log('Współrzędne GPS:', `${longitude}, ${latitude}`);
-                console.log('Nazwa lokalizacji:', displayName);
-              } else {
-                // Fallback - jeśli nie udało się pobrać nazwy, użyj współrzędnych
-                setLocationInput(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-                setFilters(prev => ({
-                  ...prev,
-                  lat: latitude,
-                  lon: longitude
-                }));
-                console.log('Współrzędne GPS (bez nazwy):', `${longitude}, ${latitude}`);
-              }
-            } else {
-              console.error('Błąd reverse geocoding:', response.status);
-              // Fallback - użyj współrzędnych
-              setLocationInput(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-              setFilters(prev => ({
-                ...prev,
-                lat: latitude,
-                lon: longitude
-              }));
-              console.log('Współrzędne GPS (błąd API):', `${longitude}, ${latitude}`);
-            }
-          } catch (error) {
-            console.error('Błąd połączenia podczas reverse geocoding:', error);
-            // Fallback - użyj współrzędnych
-            setLocationInput(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-            setFilters(prev => ({
-              ...prev,
-              lat: latitude,
-              lon: longitude
-            }));
-          }
-          
-          setShowLocationSuggestions(false);
-        },
-        (error) => {
-          console.error('Błąd geolokalizacji:', error);
-          setError('Nie udało się pobrać lokalizacji GPS. Sprawdź uprawnienia w przeglądarce.');
-        }
-      );
-    } else {
-      setError('Geolokalizacja nie jest wspierana przez Twoją przeglądarkę.');
-    }
-  };
-
   // Funkcje do zarządzania stanem mapy w localStorage
   const getMapCollapsedState = (): boolean => {
     try {
@@ -246,75 +161,13 @@ function SearchOffersPageContent() {
     setMapCollapsedState(newState);
   };
 
-  // Wyszukiwanie lokalizacji
-  const searchLocation = useCallback(async (query: string) => {
-    if (query.length < 3) {
-      setLocationSuggestions([]);
-      setShowLocationSuggestions(false);
-      return;
-    }
-
-    try {
-      setLocationSearching(true);
-      // Używamy proxy na backendzie, żeby ukryć klucz API
-      const response = await authorizedFetch(`${environment.apiUrl}/api/geocode/search?text=${encodeURIComponent(query)}`, {
-        method: 'GET'
-      });
-
-      if (response.ok) {
-        const data: LocationSuggestion[] = await response.json();
-        setLocationSuggestions(data);
-        setShowLocationSuggestions(data.length > 0);
-
-      } else {
-        console.error('Błąd wyszukiwania lokalizacji:', response.status);
-        setLocationSuggestions([]);
-        setShowLocationSuggestions(false);
-      }
-    } catch (error) {
-      console.error('Błąd połączenia z API lokalizacji:', error);
-      setLocationSuggestions([]);
-      setShowLocationSuggestions(false);
-    } finally {
-      setLocationSearching(false);
-    }
-  }, []);
-
-  // Debounced search dla lokalizacji
+  // Lokalizacja wybrana — chowamy ostrzeżenie o jej braku
   useEffect(() => {
-    // Jeśli to jest aktualizacja z GPS, zresetuj flagę i nie uruchamiaj wyszukiwania.
-    if (isGpsUpdate.current) {
-      isGpsUpdate.current = false;
-      return;
+    if (location.coords) {
+      setLocationMissing(false);
+      setErrors((prev) => ({ ...prev, location: '' }));
     }
-
-    const timeoutId = setTimeout(() => {
-      if (locationInput.length >= 3) {
-        searchLocation(locationInput);
-      } else {
-        if (locationInput.length === 0) {
-            setFilters(prev => ({...prev, lat: undefined, lon: undefined}));
-        }
-        setLocationSuggestions([]);
-        setShowLocationSuggestions(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timeoutId);
-  }, [locationInput, searchLocation]);
-
-  const handleLocationSelect = (suggestion: LocationSuggestion) => {
-    const displayName = suggestion.formatted;
-    
-    setLocationInput(displayName);
-    setFilters(prev => ({
-      ...prev,
-      lat: suggestion.lat,
-      lon: suggestion.lon
-    }));
-    
-    setShowLocationSuggestions(false);
-  };
+  }, [location.coords]);
 
   // Obsługa filtrów
   const handleTransactionTypeToggle = (type: TransactionType) => {
@@ -358,6 +211,12 @@ function SearchOffersPageContent() {
   // Wyszukiwanie ofert
   const handleSearch = async () => {
     if (!validate()) {
+      if (!location.coords) {
+        // Pole lokalizacji bywa daleko nad przyciskiem — przewijamy do niego i ustawiamy fokus
+        setLocationMissing(true);
+        locationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        locationInputRef.current?.focus({ preventScroll: true });
+      }
       return;
     }
 
@@ -372,8 +231,10 @@ function SearchOffersPageContent() {
 
       const params = new URLSearchParams();
       
-      if (filters.lat !== undefined) params.append('lat', filters.lat.toString());
-      if (filters.lon !== undefined) params.append('lon', filters.lon.toString());
+      if (location.coords) {
+        params.append('lat', location.coords.lat.toString());
+        params.append('lon', location.coords.lon.toString());
+      }
       if (filters.range !== undefined) params.append('range', filters.range.toString());
       if (filters.distanceUnit) params.append('distanceUnit', filters.distanceUnit);
       
@@ -387,7 +248,6 @@ function SearchOffersPageContent() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log(data);
         setOffers(data);
         setShowMap(true); // Pokaż mapę po wyszukiwaniu
       } else {
@@ -424,15 +284,8 @@ function SearchOffersPageContent() {
     .filter(cat => filters.categoryIds.includes(cat.id))
     .flatMap(cat => cat.subcategories);
 
-  // Przygotuj oferty do mapy (pełny URL i liczby lat/lon) i odwróć kolejność renderowania
-  const offersForMap = offers.map(offer => ({
-    ...offer,
-    lat: typeof offer.lat === 'string' ? parseFloat(offer.lat) : offer.lat,
-    lon: typeof offer.lon === 'string' ? parseFloat(offer.lon) : offer.lon,
-    imageUrl: offer.imageUrl
-  }))
-  .filter(offer => offer.lat && offer.lon)
-  .reverse(); // Odwróć kolejność - pierwsze oferty z response'a będą rysowane na końcu (na wierzchu)
+  // Piny mapy — wspólne mapowanie z widokiem /offers/map
+  const mapOffers = offersForMap(offers);
 
   if (loading) {
     return (
@@ -465,38 +318,17 @@ function SearchOffersPageContent() {
         <CardHeader title="Filtry wyszukiwania" />
 
         {/* Lokalizacja */}
-        <div className="relative mb-5">
-          <Input
-            label="Lokalizacja"
-            value={locationInput}
-            onChange={(e) => setLocationInput(e.target.value)}
-            placeholder="Wpisz nazwę miasta lub miejscowości lub kliknij ikonę GPS"
-            error={errors.location || undefined}
-            rightSlot={
-              <span className="flex items-center gap-1">
-                {locationSearching && <Spinner className="h-4 w-4 text-ink-subtle" />}
-                <IconButton
-                  label="Użyj mojej lokalizacji GPS"
-                  icon={<FaLocationCrosshairs size={18} />}
-                  onClick={getCurrentLocation}
-                  className="h-8 w-8 hover:text-brand"
-                />
-              </span>
-            }
-          />
-          {showLocationSuggestions && (
-            <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-ui-md border border-line bg-surface shadow-pop">
-              {locationSuggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleLocationSelect(suggestion)}
-                  className="w-full border-b border-line px-4 py-3 text-left text-sm text-ink last:border-b-0 hover:bg-surface-muted"
-                >
-                  <div className="font-medium">{suggestion.formatted}</div>
-                </button>
-              ))}
+        <div ref={locationSectionRef} className="mb-5 scroll-mt-24">
+          {locationMissing && (
+            <div role="alert" className="mb-3 flex items-start gap-3 rounded-ui-md border border-warning/30 bg-warning-soft px-4 py-3">
+              <LuMapPin size={18} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+              <div className="text-sm">
+                <p className="font-semibold text-ink">Brakuje lokalizacji</p>
+                <p className="mt-0.5 text-ink-muted">Wpisz miasto albo użyj GPS (ikona w polu), a potem kliknij „Szukaj”.</p>
+              </div>
             </div>
           )}
+          <LocationField picker={location} inputRef={locationInputRef} error={errors.location} />
         </div>
 
         {/* Zasięg i jednostka */}
@@ -621,11 +453,13 @@ function SearchOffersPageContent() {
                   <span className="hidden sm:inline">{isMapCollapsed ? "Rozwiń" : "Zwiń"}</span>
                 </Button>
               </div>
+              {/* Wysokość jawnie — mapa wypełnia rodzica, a bez niej miała 0 px */}
               {!isMapCollapsed && (
-                <div className="mt-3 overflow-hidden rounded-ui-md">
+                <div className="mt-3 h-80 overflow-hidden rounded-ui-md sm:h-96">
                   <GoogleMapComponent
-                    userLocation={getUserLocation()}
-                    offers={offersForMap}
+                    userLocation={location.coords ?? getUserLocation()}
+                    offers={mapOffers}
+                    zoom={zoomForRange(filters.range ?? 10)}
                   />
                 </div>
               )}

@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { environment } from "../../../config";
 import { authorizedFetch } from "../../../utils/auth";
 import OfferDetailsView from "../../../components/OfferDetailsView";
+import { Card, Spinner, cn, pageContainer } from "../../../components/ui";
+import { LuCircleAlert, LuTriangleAlert } from "react-icons/lu";
 import { OfferDetails } from "../../../types/offerDetails";
 
 // Globalny mechanizm zapobiegający wielokrotnym pobraniom tej samej oferty
@@ -97,47 +99,55 @@ export default function OfferDetailsPage() {
     // obietnica pozostanie w Map i może być wykorzystana przez kolejną instancję
   }, [offerId]); // Usunięto router z zależności - jest stabilny w Next.js
 
-  if (loading) return <div className="flex justify-center items-center h-96">Ładowanie...</div>;
-  if (error) return <div className="text-center text-red-600 py-10">{error}</div>;
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Spinner className="h-7 w-7 text-brand" label="Wczytywanie oferty" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className={cn(pageContainer, 'py-8')}>
+        <Card padding="lg" role="alert" className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft text-danger">
+            <LuCircleAlert size={22} aria-hidden />
+          </span>
+          <p className="text-sm text-ink">{error}</p>
+        </Card>
+      </div>
+    );
+  }
   if (!offer) return null;
+
+  const notice =
+    offer.status === 'INACTIVE'
+      ? {
+          className: 'border-danger/30 bg-danger-soft text-danger',
+          icon: <LuCircleAlert size={18} className="mt-0.5 shrink-0" aria-hidden />,
+          lead: 'Uwaga:',
+          text: 'Ta oferta jest nieaktywna i może być nieaktualna. Skontaktuj się ze sprzedawcą, aby potwierdzić dostępność przed umówieniem się na odbiór.',
+        }
+      : offer.status === 'PENDING_VERIFICATION'
+        ? {
+            className: 'border-warning/30 bg-warning-soft text-warning',
+            icon: <LuTriangleAlert size={18} className="mt-0.5 shrink-0" aria-hidden />,
+            lead: 'Informacja:',
+            text: 'Ta oferta oczekuje na weryfikację. Może być jeszcze niedostępna lub wymagać dodatkowych informacji.',
+          }
+        : null;
 
   return (
     <div>
-      {/* Komunikat o nieaktywnej ofercie */}
-      {offer.status === 'INACTIVE' && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-red-700">
-                <strong>Uwaga:</strong> Ta oferta jest nieaktywna i może być nieaktualna. 
-                Skontaktuj się z sprzedawcą, aby potwierdzić dostępność przed umówieniem się na odbiór.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Komunikat o ofercie oczekującej na weryfikację */}
-      {offer.status === 'PENDING_VERIFICATION' && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                <strong>Informacja:</strong> Ta oferta oczekuje na weryfikację. 
-                Może być jeszcze niedostępna lub wymagać dodatkowych informacji.
-              </p>
-            </div>
-          </div>
+      {/* Komunikat o nieaktywnej / weryfikowanej ofercie — w kolumnie treści szczegółów */}
+      {notice && (
+        <div className={cn(pageContainer, 'pt-6 sm:pt-8')}>
+          <p role="status" className={cn('flex items-start gap-2.5 rounded-ui-md border px-4 py-3 text-sm', notice.className)}>
+            {notice.icon}
+            <span>
+              <strong>{notice.lead}</strong> {notice.text}
+            </span>
+          </p>
         </div>
       )}
 

@@ -16,6 +16,8 @@ interface ReserveOfferPanelProps {
   availableQuantity: number;
   /** Łączna liczba sztuk wystawiona przez sprzedawcę — kontekst dla użytkownika. */
   totalQuantity?: number | null;
+  /** Nowa dostępność po udanej rezerwacji — rodzic odświeża nią własny licznik. */
+  onAvailabilityChange?: (available: number) => void;
 }
 
 /**
@@ -29,6 +31,7 @@ export default function ReserveOfferPanel({
   offerId,
   availableQuantity,
   totalQuantity,
+  onAvailabilityChange,
 }: ReserveOfferPanelProps) {
   const [available, setAvailable] = useState(availableQuantity);
   const [quantity, setQuantity] = useState(1);
@@ -61,8 +64,11 @@ export default function ReserveOfferPanel({
       // Licznik dostępności przychodzi z odpowiedzi — bez dodatkowego zapytania
       if (typeof created.offerAvailableQuantity === 'number') {
         setAvailable(created.offerAvailableQuantity);
+        onAvailabilityChange?.(created.offerAvailableQuantity);
       } else {
-        setAvailable((prev) => Math.max(0, prev - quantity));
+        const next = Math.max(0, available - quantity);
+        setAvailable(next);
+        onAvailabilityChange?.(next);
       }
       setQuantity(1);
     } catch {

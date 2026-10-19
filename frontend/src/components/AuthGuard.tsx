@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { Spinner } from './ui';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -18,42 +19,11 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
     return (
       <>
         {loadingComponent || (
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100vh',
-            backgroundColor: '#f7fafc'
-          }}>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '16px'
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                border: '4px solid #fbbf24',
-                borderTop: '4px solid transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
-              <div style={{
-                color: '#4a5568',
-                fontSize: '16px'
-              }}>
-                Sprawdzanie autoryzacji...
-              </div>
-            </div>
+          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
+            <Spinner className="h-7 w-7 text-brand" label="Sprawdzanie autoryzacji" />
+            <p className="text-sm text-ink-muted">Sprawdzanie autoryzacji…</p>
           </div>
         )}
-        <style jsx>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </>
     );
   }

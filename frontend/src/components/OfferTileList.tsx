@@ -4,6 +4,11 @@ import React, { useRef, useState, useCallback } from 'react';
 import OfferTile from './OfferTile';
 import { OfferTileSkeleton } from './offer/OfferTileSkeleton';
 import { OfferTileProps } from '../types/offer';
+import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { cn } from './ui';
+
+const ARROW =
+  'absolute top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-line bg-surface/95 text-ink-muted shadow-pop opacity-0 transition-opacity duration-200 hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:hover)]:flex';
 
 export interface OfferTileListProps {
   offers: OfferTileProps[];
@@ -88,26 +93,22 @@ export default function OfferTileList({
 
   return (
     <div className="relative group">
-      {/* Przycisk w lewo */}
+      {/* Strzałki przewijania — tylko na urządzeniach z kursorem (hover) */}
       <button
+        type="button"
         onClick={() => scrollTo('left')}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 -ml-4"
+        className={cn(ARROW, 'left-0 -ml-3')}
         aria-label="Przewiń w lewo"
       >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
+        <LuChevronLeft size={18} aria-hidden />
       </button>
-
-      {/* Przycisk w prawo */}
       <button
+        type="button"
         onClick={() => scrollTo('right')}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 -mr-4"
+        className={cn(ARROW, 'right-0 -mr-3')}
         aria-label="Przewiń w prawo"
       >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+        <LuChevronRight size={18} aria-hidden />
       </button>
 
       {/* Kontener z ofertami */}
