@@ -10,6 +10,28 @@ Stan na 10.2026. Rdzeń przepływu (rezerwacja → odbiór → raport, cena, pra
 | 4 | **Statystyki platformowe pod pilotaż** | Materiał do rozmów z siecią (aktywni, sklepy, rezerwacje, odbiory) | `DashboardStatisticsService` (częściowo) | **zrobione** (10.2026) |
 | 5 | **FCM + powiadomienia rezerwacji** | Potwierdzenie rezerwacji, ostrzeżenie o wygaśnięciu, przypomnienie odbioru | naprawa FirebaseConfig (projekt Firebase `givenget-b5ef0` — Piotra, dostępny; `serviceAccountKey.json` na dysku) | w toku |
 | 6 | **Panel pracowników sklepu (UI firmy)** | Firma sama zakłada konta pracowników i odbiera im dostęp — bez curla | provisioning `POST /api/v1/store-employees` był | **zrobione** (10.2026) |
+| 7 | **Cena przed obniżką (`originalPrice`)** | Pokazuje oszczędność („normalnie X, teraz Y" + % rabatu) — rdzeń wartości „food rescue", mocny argument na spotkaniach z partnerami | jest `price`/`quantity` | **zrobione** (migracja `53`, szczegóły niżej) |
+
+| 8 | **Lista rezerwacji dla firmy** | Sklep widzi, kto zarezerwował jego towar (pulpit „Ostatnie rezerwacje" + strona „Rezerwacje") — dziś „wkrótce", bo backend zwraca tylko rezerwacje bieżącego usera | jest moduł `reservation` | **zrobione** (10.2026, szczegóły niżej) |
+
+## Lista rezerwacji dla firmy — zrobione (#8)
+Backend: `GET /api/v1/reservations/for-store?page&size&status?` (ROLE_COMPANY) → rezerwacje na oferty **tej** firmy (join `reservation → offer → offer.user`), paginacja (`PageResponse`), opcjonalny filtr statusu, sort `createdAt desc, id desc`; sprawdzenie w serwisie, że oferty należą do firmy wywołującej. DTO bez danych wrażliwych klienta (kod odbioru widoczny tylko pracownikowi przy odbiorze — tu pokazujemy status/ilość/ofertę/czas, nie `pickupCode`). Frontend (konsola firmy): strona „Rezerwacje" (zastępuje „wkrótce") + sekcja „Ostatnie rezerwacje" na pulpicie. Wchodzi z reskinem pulpitu/konsoli firmy (grupa C).
+
+**Jak zrobione:**
+- `ReservationController.listForStore` → `ReservationService.listForStore`; reguła `GET /api/v1/reservations/for-store` → `hasRole("COMPANY")` w `SecurityConfig` przed ogólną `/api/v1/**`. Serwis ponownie sprawdza typ konta (`403 FORBIDDEN`), a zakres wyznacza zapytanie po `offer.user.id = wywołujący` — firma nie dostanie rezerwacji na cudze oferty niezależnie od parametrów.
+- Filtr po statusie **efektywnym** (jak w DTO): RESERVED po terminie, którego scheduler jeszcze nie przestawił, wypada z „RESERVED” i wpada do „EXPIRED” (sprawdzone na żywej bazie). Wielkość liter bez znaczenia; zła wartość → `400 INVALID_RESERVATION_STATUS` z `details.allowed`.
+- `StoreReservationDTO`: id, status, ilość, oferta (id, nazwa, miniatura), **tylko imię klienta**, `createdAt`, `expiresAt`, `collectedAt`, `cancelledAt`. Bez `pickupCode`/`qrPayload`, nazwiska, e-maila i telefonu.
+- Paginacja `PageParams` (domyślnie 20, limit 100), sort `createdAt desc, id desc`; oferta i klient dociągane `@EntityGraph`.
+- Testy: `StoreReservationListTest` (serwis), `StoreReservationsSecurityTest` (prawdziwy `SecurityConfig`: tylko COMPANY, `/for-store` nie wpada w `/{id}`, brak kodu odbioru w JSON).
+- UI: `/store/reservations` (filtr statusu, paginacja, tabela/karty) i „Ostatnie rezerwacje” + liczniki „Do odbioru”/„Odbiory” na pulpicie (`totalElements` z `size=1`).
+
+## Cena przed obniżką — zrobione (#7)
+- **Schemat:** `offer.original_price DECIMAL(10,2) NULL` (migracja `53`). NULL = oferta bez przeceny.
+- **Reguły** (`OfferService.resolvePricingForCreate/ForUpdate` — jedno miejsce dla formularza, edycji i importu): tylko sprzedaż (`400 ORIGINAL_PRICE_NOT_ALLOWED`), format jak cena — > 0, maks. 2 miejsca, limit (`400 INVALID_ORIGINAL_PRICE`), musi być wyższa od ceny (`400 ORIGINAL_PRICE_NOT_HIGHER`, `details: price, originalPrice`).
+- **Edycja:** `originalPrice` brak pola = bez zmian (stary klient mobilny nie skasuje przeceny); usunięcie tylko jawnie `clearOriginalPrice=true` (razem z `originalPrice` → `INVALID_ORIGINAL_PRICE`). Zmiana typu na darmowy/wymianę czyści przecenę razem z ceną. Nowa cena ≥ zapisanej `originalPrice` → `ORIGINAL_PRICE_NOT_HIGHER` z podpowiedzią „podnieś też cenę przed obniżką albo ją usuń" — przeceny nie kasujemy po cichu.
+- **API:** `OfferPreview` i `OfferDetailsDTO` mają `originalPrice` i `discountPercent` (Integer, HALF_UP, liczony w backendzie — `OfferPreviewSupport.discountPercent`; `null`, gdy brak przeceny albo rabat zaokrągla się do 0 %).
+- **Import Excel:** opcjonalna kolumna `cena_przed_obnizka` (przykład w szablonie: chleb 4.99 / 7.99), błędy per wiersz z tymi samymi kodami.
+- **UI:** komponent `Price` (kafelek i szczegóły): nowa cena, przekreślona `originalPrice`, badge „−NN%" z `discountPercent`. Pole „Cena przed obniżką" w formularzu tylko dla sprzedaży.
 
 ## Uwagi
 - **Panel pracowników sklepu — zrobione.** `GET /api/v1/store-employees?page&size` (`PageResponse<StoreEmployeeDTO>`, sort `createDate desc, id desc`, tylko pracownicy sklepu wywołującego) i `PATCH /api/v1/store-employees/{id}` z `{ "active": true|false }` (idempotentne). Cała ścieżka `/api/v1/store-employees/**` → `ROLE_COMPANY`; cudzy lub nieistniejący pracownik → ten sam `404 STORE_EMPLOYEE_NOT_FOUND`. DTO: id, imię, nazwisko, e-mail, telefon, sklep, `createdAt`, `active` — bez hasła. UI: `/store/employees` (formularz + tabela/karty z paginacją i przyciskiem Dezaktywuj/Aktywuj), link w menu firmy, `MobileHeader`, kafelek w `CompanyDashboard`.
@@ -31,3 +53,23 @@ Stan na 10.2026. Rdzeń przepływu (rezerwacja → odbiór → raport, cena, pra
 
 ## Kolejność realizacji
 1 (Import Excela) → 2 (RODO) → 3 (profil sklepu) → 4 (statystyki) → 5 (FCM, po Firebase).
+
+## Po redesignie — PWA (mobile bez Capacitora na teraz)
+Capacitor odkładamy (dystrybucja do sklepów app store'owych to dłuższa droga). Na pilotaż wystarczy **PWA** — ten sam front Next.js, instalowalny, bo backend jest API-first (REST + JWT w nagłówku, DTO, bez sesji/cookie — §6), więc API nie wymaga zmian. Zakres etapu:
+- **`manifest.json`** (nazwa Biovlo, `theme_color`/`background_color` z tokenów, `display: standalone`) + **ikony PNG** 192 / 512 / maskable — generowane z `biovlo_logo.png` (logo już mamy, przezroczyste).
+- **Service worker** przez **Serwist** (następca `next-pwa`; stary `next-pwa` ma problemy z App Routerem Next 15) — offline-shell + cache statyków. Uwaga: nie cache'ować odpowiedzi API z danymi wrażliwymi.
+- **HTTPS** — warunek konieczny PWA; i tak na liście przed pilotażem (`docs/06`).
+- **Push w PWA = FCM-web** (mamy FCM): Android/Chrome działa w tle po instalacji; **iOS Safari tylko od 16.4+ i tylko gdy PWA dodana do ekranu początkowego** (brak auto-promptu „zainstaluj", push nie działa w zwykłej karcie). Zweryfikować aktualne zachowanie iOS przy wpinaniu.
+- Wejście dopiero **po całym redesignie** (front responsywny jest warunkiem sensownej PWA).
+
+## Nice-to-have backendu (wyszło przy reskinie panelu admina, grupa E) — nie na pilotaż
+- **Rola w liście użytkowników.** `GET` listy userów w panelu admina nie zwraca roli konta, więc front nie pokazuje plakietki rola (firma/konsument/pracownik/admin). Dodanie pola do DTO listy jest proste i addytywne (nie psuje klientów) — zrobić osobno, poza gałęzią `redesign`, która ma mieć zamrożony backend.
+- **Zmiana roli z panelu — pomijamy na pilotaż.** Brak endpointu; to nie jest przepływ pilotażu, w razie potrzeby rola zmienialna w bazie.
+- **Wejście na `/offers/mod-edit` zapisuje wyświetlenie oferty** (zachowanie sprzed redesignu). Zafałszowuje statystyki wyświetleń sprzedawcy — moderator nie jest klientem. Na pilotaż pomijalne (moderatorzy = my), do naprawy później: nie liczyć wyświetlenia przy wejściu w trybie moderacji.
+
+## Nice-to-have czatu (wyszło przy reskinie, grupa F) — nie na pilotaż
+- **Powiązanie czatu z ofertą.** Rozmowy nie mają pola oferty (`chats` + `/api/chats/me`), więc w oknie czatu nie da się pokazać, której oferty dotyczy rozmowa ani linku do niej. W marketplace to przydatne — wymaga dodania pola oferty w backendzie (encja + DTO). Osobno, poza `redesign`.
+- **Flaga ładowania wiadomości.** Przy otwieraniu rozmowy przez chwilę miga „Brak wiadomości", bo kod nie ma stanu „ładowanie wiadomości" (jest tylko dla listy rozmów). Dodanie wymaga zmiany logiki pobierania — drobny polish na później.
+
+## Branding — logo dostarczone
+Łukasz przysłał logo Biovlo (okrąg: domek + uścisk dłoni + koszyk z warzywami, paleta zieleń/pomarańcz + ciemnozielony napis). Zrobione: wersja przezroczysta (`biovlo_logo.png` pełny kwadrat, `biovlo_logo_trim.png` przycięty). Do zrobienia przy brandingu: podmienić roboczy `Logo.tsx` (listek) na prawdziwe logo, **wyprowadzić tokeny kolorów z logo** (dziś zielenie są „robocze do czasu logo"), wygenerować favicony i ikony PWA z `biovlo_logo.png`.

@@ -18,6 +18,7 @@ Rzeczy do zrobienia po stronie Piotra: konta zewnętrzne, wdrożenie, weryfikacj
 - [ ] **Prawdziwy regulamin i polityka prywatności (po polsku).** Obecne strony `static-content/terms-of-service` i `privacy-policy` to angielski placeholder („eaty.com", 2013). Przed pilotażem pod marką sieci podmienić na właściwą treść Biovlo (materiał prawny — Ty/Łukasz). Po podmianie podbić `terms.current-version`.
 
 ## Wdrożenie pilotażu
+- [ ] **Konta testowe NIE mogą trafić na produkcję/VPS.** W bazie dev są konta `*@test.pl` (m.in. `admin@test.pl` z rolą ADMIN, `firma@test.pl`, `user@test.pl`, `pracownik@test.pl`) — hasła jak reszta kont testowych. Przed deployem upewnić się, że baza pilotażu jest czysta (Liquibase zakłada schemat, nie seeduje tych kont, ale zweryfikować po migracji). Realne konto admina założyć osobno z silnym hasłem.
 - [ ] **HTTPS na środowisku pilotażu.** Reverse proxy (Caddy albo nginx) + certyfikat Let's Encrypt przed frontem/backendem na VPS. **Konieczne** — skaner QR w panelu pracownika (`getUserMedia`) działa tylko w bezpiecznym kontekście; pod samym IP kamera nie wstanie.
 - [ ] **Capacitor** jako ostatni krok przed pilotażem (instalowalna apka, push iOS, kamera) — patrz `03_ARCHITEKTURA_MOBILE.md`.
 

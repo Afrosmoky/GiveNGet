@@ -81,6 +81,10 @@ services:
         NEXT_PUBLIC_ENVIRONMENT: ${NEXT_PUBLIC_ENVIRONMENT:-production}
     container_name: gng-frontend
     restart: always
+    environment:
+      # Adres backendu dla fetchy po stronie serwera Next (SSR) — w sieci compose,
+      # bo localhost z wnętrza kontenera to sam frontend. Patrz src/config/serverApi.ts.
+      INTERNAL_API_URL: http://backend:8080
     depends_on:
       - backend
     ports:
