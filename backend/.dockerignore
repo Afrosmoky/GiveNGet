@@ -1,0 +1,10 @@
+# Kontekst builda obrazu backendu. Klucz serwisowy Firebase NIE może trafić do obrazu
+# (wcześniej `COPY . .` + `mvn package` pakowało go do JAR-a) — w runtime jest montowany
+# jako plik, patrz docker-compose.yml i FIREBASE_CREDENTIALS_PATH.
+src/main/resources/serviceAccountKey.json
+**/serviceAccountKey*.json
+target/
+uploads/
+*.iml
+.idea/
+src/.lh/

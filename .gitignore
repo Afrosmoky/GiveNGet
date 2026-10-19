@@ -17,6 +17,8 @@
 
 # Docker build cache
 .dockerignore
+# …poza backendem: jego .dockerignore trzyma klucz Firebase z dala od obrazu (musi być w repo)
+!backend/.dockerignore
 
 # Next.js build output
 frontend/.next/
