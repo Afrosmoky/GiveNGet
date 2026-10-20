@@ -734,7 +734,7 @@ export function OfferForm({
   if (currentStep === "categories") {
     const needsSubcategory = Boolean(selectedCategoryData?.subcategories?.length);
     return (
-      <div className={cn(pageFrame, '[&>*]:max-w-4xl')}>
+      <div className={pageFrame}>
         <PageHeader title={title} description="Krok 1 z 2 — wybierz kategorię produktu." />
 
         <Card padding="lg">
@@ -807,7 +807,7 @@ export function OfferForm({
 
   // Krok 2: Szczegóły oferty
   return (
-    <div className={cn(pageFrame, '[&>*]:max-w-4xl')}>
+    <div className={pageFrame}>
       <PageHeader
         title={title}
         description="Krok 2 z 2 — opisz ofertę i ustal warunki odbioru."

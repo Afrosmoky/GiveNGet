@@ -305,7 +305,7 @@ function EditOfferPageContent() {
 
   return (
     <div>
-      <div className={cn(pageColumn, 'space-y-4 [&>*]:max-w-4xl')}>
+      <div className={cn(pageColumn, 'space-y-4')}>
         {/* Status oferty i jego zmiana */}
         {offer.status && offer.status !== 'PENDING_VERIFICATION' && (
           <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

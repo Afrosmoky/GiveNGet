@@ -93,8 +93,8 @@ function ReservationsPageContent() {
   };
 
   return (
-    // Rama jak na pozostałych ekranach konsumenta; lista zostaje w węższej kolumnie (czytelność kart)
-    <div className={cn(pageContainer, 'py-6 sm:py-8 [&>*]:max-w-4xl')}>
+    // Wspólna szerokość ekranów treści konsumenta (jak /offers/search)
+    <div className={cn(pageContainer, 'py-6 sm:py-8')}>
       <PageHeader
         title="Moje rezerwacje"
         description="Pokaż kod odbioru w sklepie, żeby odebrać zarezerwowany towar."
