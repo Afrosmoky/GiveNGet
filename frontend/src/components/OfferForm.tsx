@@ -820,7 +820,7 @@ export function OfferForm({
 
       {/* Informacja o pozostałych ofertach */}
       {!isEditing && userData && typeof userData.freeOffersCount === 'number' && (
-        <div className="mb-4 flex items-start gap-3 rounded-ui-md border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-900">
+        <div className="mb-4 flex max-w-3xl items-start gap-3 rounded-ui-md border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-900">
           <LuInfo size={18} aria-hidden className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">Pozostało Ci {userData.freeOffersCount || 0} darmowych ofert w tym miesiącu</p>
@@ -831,7 +831,8 @@ export function OfferForm({
         </div>
       )}
 
-      <div className="flex flex-col gap-4">
+      {/* Rama i nagłówek na pełnej szerokości (jak /offers/search); pola w czytelnej kolumnie ~768px */}
+      <div className="flex max-w-3xl flex-col gap-4">
         {/* Zdjęcia */}
         <Card padding="lg">
           <CardHeader title="Zdjęcia" description="Maksymalnie 5 zdjęć, każde do 5 MB." />

@@ -305,7 +305,8 @@ function EditOfferPageContent() {
 
   return (
     <div>
-      <div className={cn(pageColumn, 'space-y-4')}>
+      {/* Pasek statusu w tej samej kolumnie co pola OfferForm (max-w-3xl) */}
+      <div className={cn(pageColumn, 'space-y-4 [&>*]:max-w-3xl')}>
         {/* Status oferty i jego zmiana */}
         {offer.status && offer.status !== 'PENDING_VERIFICATION' && (
           <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
