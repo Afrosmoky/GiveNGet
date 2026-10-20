@@ -40,7 +40,7 @@ export function TopBar({ variant, isLoggedIn, user, consoleTitle, onOpenDrawer, 
   const accountArea =
     variant === 'pending' ? null : isLoggedIn ? (
       <>
-        {/* Wspólny pasek konsumenta, konsoli i stanowiska sklepu; sam przycisk chowa się na mobile i w PWA */}
+        {/* Wspólny pasek konsumenta, konsoli i stanowiska sklepu; widoczność (desktop / iOS / PWA) rozstrzyga sam przycisk */}
         <InstallAppButton className="mr-1" />
         <NotificationsBell unreadChats={unreadChats} markRead={markRead} />
         <UserMenu user={user} items={userMenuItems(variant, user?.userType ?? null)} unreadCount={unreadChats.length} onLogout={onLogout} />
@@ -64,7 +64,11 @@ export function TopBar({ variant, isLoggedIn, user, consoleTitle, onOpenDrawer, 
         )}
 
         {/* W konsoli logo jest w sidebarze; na mobile (sidebar schowany) pokazujemy je tutaj */}
-        <Logo className={cn('shrink-0', isConsole && 'lg:hidden')} compact={isConsole} />
+        {/* Pasek pracownika na bardzo wąskich ekranach (<360px): sam znak, żeby zmieścić „Odbiór” i ikonę instalacji */}
+        <Logo
+          className={cn('shrink-0', isConsole && 'lg:hidden', variant === 'store' && 'max-[359px]:[&>span]:hidden')}
+          compact={isConsole}
+        />
 
         {isConsole && consoleTitle && <p className="truncate text-sm font-semibold text-ink lg:text-base">{consoleTitle}</p>}
 

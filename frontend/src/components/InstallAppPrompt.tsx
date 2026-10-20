@@ -35,7 +35,8 @@ export function InstallAppPrompt({ className }: { className?: string }) {
   };
 
   return (
-    <div className={cn('flex items-center gap-3 rounded-ui-md border border-line bg-surface p-3.5 shadow-card', className)}>
+    // Od md w górę instalację obsługuje stały przycisk „Pobierz aplikację” w pasku — karta tylko na mobile
+    <div className={cn('flex items-center gap-3 rounded-ui-md border border-line bg-surface p-3.5 shadow-card md:hidden', className)}>
       <BrandLogo width={34} className="shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-brand-ink">Zainstaluj aplikację Biovlo</p>
