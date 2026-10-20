@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { FiMapPin, FiMenu, FiSearch } from 'react-icons/fi';
 import { Button, IconButton, Logo, cn, pageContainer } from '../ui';
+import { InstallAppButton } from '../InstallAppButton';
 import { useChatNotifications } from '../../hooks/useChatNotifications';
 import type { AuthTokenData } from '../../utils/auth';
 import { consumerTopNav, isNavActive, storeNav, userMenuItems, type ShellVariant } from './navConfig';
@@ -39,6 +40,8 @@ export function TopBar({ variant, isLoggedIn, user, consoleTitle, onOpenDrawer, 
   const accountArea =
     variant === 'pending' ? null : isLoggedIn ? (
       <>
+        {/* Wspólny pasek konsumenta, konsoli i stanowiska sklepu; sam przycisk chowa się na mobile i w PWA */}
+        <InstallAppButton className="mr-1" />
         <NotificationsBell unreadChats={unreadChats} markRead={markRead} />
         <UserMenu user={user} items={userMenuItems(variant, user?.userType ?? null)} unreadCount={unreadChats.length} onLogout={onLogout} />
       </>
@@ -67,7 +70,7 @@ export function TopBar({ variant, isLoggedIn, user, consoleTitle, onOpenDrawer, 
 
         {showConsumerNav && (
           <>
-            <nav aria-label="Główna nawigacja" className="ml-2 hidden items-center gap-0.5 lg:flex">
+            <nav aria-label="Główna nawigacja" className="ml-2 hidden shrink-0 items-center gap-0.5 whitespace-nowrap lg:flex">
               {consumerTopNav.map(item => (
                 <TopNavLink key={item.label} item={item} active={isNavActive(pathname, item)} />
               ))}
@@ -77,15 +80,15 @@ export function TopBar({ variant, isLoggedIn, user, consoleTitle, onOpenDrawer, 
             <button
               type="button"
               onClick={() => router.push('/offers/search')}
-              className="ml-auto hidden h-10 w-full max-w-xs items-center gap-2 rounded-full border border-line bg-surface-muted px-4 text-left text-sm text-ink-subtle transition-colors hover:border-line-strong md:flex"
+              className="ml-auto hidden h-10 w-full min-w-0 max-w-xs items-center gap-2 rounded-full border border-line bg-surface-muted px-4 text-left text-sm text-ink-subtle transition-colors hover:border-line-strong md:flex"
             >
-              <FiSearch size={16} />
-              Czego szukasz?
+              <FiSearch size={16} className="shrink-0" />
+              <span className="truncate">Czego szukasz?</span>
             </button>
 
             <Link
               href="/offers/search"
-              className="hidden h-10 items-center gap-1.5 rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink xl:flex"
+              className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink xl:flex"
               title={hasLocation ? 'Szukasz w pobliżu zapisanej lokalizacji' : 'Ustaw lokalizację w wyszukiwaniu'}
             >
               <FiMapPin size={16} className={hasLocation ? 'text-brand' : undefined} />
