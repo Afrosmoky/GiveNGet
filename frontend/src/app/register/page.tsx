@@ -578,6 +578,7 @@ function UserRegistrationForm({ router }: { router: { push: (url: string) => voi
 
 // Komponent rejestracji firmy
 function CompanyRegistrationForm() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     companyName: '',
@@ -1016,10 +1017,7 @@ function CompanyRegistrationForm() {
         });
 
         if (response.ok) {
-          setSubmitMessage({
-            type: 'success',
-            text: 'Firma została zarejestrowana pomyślnie!'
-          });
+          router.push('/register/success');
         } else {
           const errorData = await response.text();
           setSubmitMessage({
