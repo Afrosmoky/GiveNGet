@@ -58,6 +58,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET jest wymagany - uzupelnij .env}
       SMTP_USERNAME: ${SMTP_USERNAME:?SMTP_USERNAME jest wymagany - uzupelnij .env}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD jest wymagany - uzupelnij .env}
+      # Nazwa nadawcy maili (adres zostaje = SMTP_USERNAME)
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Biovlo}
       GEOAPIFY_KEY: ${GEOAPIFY_KEY:?GEOAPIFY_KEY jest wymagany - uzupelnij .env}
       # Credentiale bazy — muszą zgadzać się z sekcją mysql poniżej
       DB_USERNAME: ${DB_USERNAME:-gnguser}
