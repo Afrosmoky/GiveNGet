@@ -89,6 +89,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main
           className={cn(
             'flex-1',
+            // Strony na AuthCard: main jako kolumna, żeby karta mogła wypełnić wysokość między paskiem a stopką
+            'has-[[data-auth-page]]:flex has-[[data-auth-page]]:flex-col',
             variant === 'store' && 'mx-auto w-full max-w-3xl'
           )}
         >

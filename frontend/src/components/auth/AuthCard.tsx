@@ -49,7 +49,9 @@ export function AuthCard({
   className,
 }: AuthCardProps) {
   return (
-    <div className="flex min-h-[calc(100dvh-var(--shell-topbar-h))] items-start justify-center px-4 py-8 sm:items-center sm:py-12">
+    // Wypełnia <main> (flex-1): logo + karta wyśrodkowane w pionie, stopka powłoki zostaje przy dolnej krawędzi ekranu.
+    // Mobile: od góry — przy otwartej klawiaturze wyśrodkowany formularz uciekałby pod nią.
+    <div data-auth-page className="flex flex-1 items-start justify-center px-4 py-8 sm:items-center sm:py-12">
       <div className={cn('w-full', WIDTHS[width])}>
         {showLogo && (
           <div className="mb-6 flex justify-center">
