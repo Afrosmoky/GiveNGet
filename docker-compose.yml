@@ -70,6 +70,9 @@ services:
       # Powiadomienia o rezerwacji (minuty) — opcjonalnie, do testów skracamy
       RESERVATION_EXPIRY_WARNING_BEFORE_MINUTES: ${RESERVATION_EXPIRY_WARNING_BEFORE_MINUTES:-120}
       RESERVATION_PICKUP_REMINDER_MIN_AGE_MINUTES: ${RESERVATION_PICKUP_REMINDER_MIN_AGE_MINUTES:-30}
+      # Dane demonstracyjne — tylko instancja pokazowa (docs/11_DEMO_SEED.md)
+      DEMO_SEED_ENABLED: ${DEMO_SEED_ENABLED:-false}
+      DEMO_SEED_PASSWORD: ${DEMO_SEED_PASSWORD:-}
     ports:
       - "8080:8080"
     volumes:

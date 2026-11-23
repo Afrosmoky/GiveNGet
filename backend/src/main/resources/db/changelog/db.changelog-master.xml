@@ -240,4 +240,8 @@
         <sqlFile path="db/57-mail-templates-biovlo-style.sql"/>
     </changeSet>
 
+    <changeSet id="58-demo-seed-state" author="piotr.szulc">
+        <sqlFile path="db/58-demo-seed-state.sql" splitStatements="true" endDelimiter=";"/>
+    </changeSet>
+
 </databaseChangeLog>
