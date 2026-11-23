@@ -12,6 +12,6 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        return new ConcurrentMapCacheManager("users", "forbiddenWords", "forbiddenRegex");
+        return new ConcurrentMapCacheManager("users", "forbiddenWords", "forbiddenRegex", "reverseGeocode");
     }
 }

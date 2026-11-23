@@ -5,6 +5,8 @@ import com.example.gng.geocode.dto.GeocodingByCoordinatesResponse;
 import com.example.gng.geocode.dto.SimplifiedGeocodingResponse;
 import com.example.gng.geocode.dto.Feature;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.ResponseEntity;
@@ -24,8 +26,14 @@ public class GeoCodeService {
 
     private final RestTemplate restTemplate;
 
-    public GeoCodeService() {
-        this.restTemplate = new RestTemplate();
+    // Timeout połączenia i odczytu: wolne Geoapify nie może blokować listy ofert. Przekroczenie
+    // kończy się ResourceAccessException (RuntimeException), które OfferService łapie i pokazuje
+    // kafelek bez nazwy miasta.
+    public GeoCodeService(@Value("${geoapify.timeout-ms:2000}") int timeoutMs) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(timeoutMs);
+        requestFactory.setReadTimeout(timeoutMs);
+        this.restTemplate = new RestTemplate(requestFactory);
     }
 
     private GeocodingByCityResponse searchByQuery(String query) {
@@ -45,6 +53,11 @@ public class GeoCodeService {
         return mapToSimplifiedResponseList(fullResponse);
     }
 
+    // Cache po znormalizowanych współrzędnych (ReverseGeocodeKeyGenerator). Nie zapisujemy null
+    // ani wyjątków — awaria Geoapify nie może się „przykleić" do współrzędnych.
+    // Uwaga: działa tylko przy wywołaniu z innego beana (proxy); nie wołać z wnętrza tej klasy.
+    @Cacheable(cacheNames = "reverseGeocode", keyGenerator = ReverseGeocodeKeyGenerator.BEAN_NAME,
+            unless = "#result == null")
     public SimplifiedGeocodingResponse searchByCoordinatesSimplified(String lat, String lon) {
         GeocodingByCoordinatesResponse fullResponse = searchByCoordinates(lat, lon);
         return mapToSimplifiedResponse(fullResponse);
