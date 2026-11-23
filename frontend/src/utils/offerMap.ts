@@ -14,6 +14,8 @@ export interface MapOffer {
   price?: number | null;
   currency?: string | null;
   availableQuantity?: number | null;
+  /** Do ikony kategorii zamiast miniatury, gdy oferta nie ma zdjęcia (jak w OfferTile). */
+  categoryId?: number | null;
 }
 
 /**

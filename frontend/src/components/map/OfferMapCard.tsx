@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { getImageUrl } from '../../utils/imageUtils';
+import { categoryIcon } from '../offer/categoryIcons';
 import { offerHref, type MapOffer } from '../../utils/offerMap';
 import { StatusPill, cn, formatPrice } from '../ui';
 
@@ -13,14 +14,18 @@ export function OfferMapCard({ offer, className }: { offer: MapOffer; className?
       : offer.transactionType === 'exchange'
         ? 'Wymiana'
         : 'Za darmo';
+  // Bez zdjęcia — ikona kategorii, spójnie z OfferTile (sam kolor tła wyglądał jak niezaładowany obrazek)
+  const CategoryIcon = categoryIcon(offer.categoryId);
 
   return (
     <Link href={offerHref(offer)} className={cn('flex gap-3 rounded-ui-md p-2 pr-8 transition-colors hover:bg-surface-muted', className)}>
       <span
-        className="h-16 w-16 shrink-0 rounded-ui-md bg-brand-soft bg-cover bg-center"
+        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-ui-md bg-brand-soft bg-cover bg-center text-brand/60"
         style={offer.imageUrl ? { backgroundImage: `url(${getImageUrl(offer.imageUrl)})` } : undefined}
         aria-hidden
-      />
+      >
+        {!offer.imageUrl && <CategoryIcon size={26} strokeWidth={1.5} />}
+      </span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 text-sm font-semibold leading-snug text-ink">{offer.name}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
